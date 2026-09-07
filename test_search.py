@@ -297,15 +297,23 @@ def test_pruning_safety():
     bugs show up as a mate the unpruned search finds and the pruned one
     misses. Each fixture's mate distance is confirmed by an independent
     brute-force solver, so a mis-stated position fails instead of hiding."""
+    # Positions must keep more than five pieces: below that the specialised
+    # endgame evaluation returns an exact non-mate score by design, so a mate
+    # score is not the right assertion there (test_convert.py covers those).
+    # Every mate distance is confirmed by the brute-force solver below.
     fixtures = [
-        ("7k/8/8/8/8/8/R7/1R5K w - - 0 1", 3),
-        ("6k1/8/8/8/8/8/8/K2R3R w - - 0 1", 3),
+        ("2b1r3/2pk1p1p/r2pqn2/p7/PP3P2/p1PP2p1/4B1PP/1K1R3R b - - 3 27", 3),
+        ("2r1r3/2n3kp/3b1Rp1/2pp3P/2p1b1P1/3PpB2/4P1K1/QN4NR w - - 3 31", 3),
+        ("rn5r/7k/p4Ppn/P1ppp2p/1p1Pp3/R1P1QNP1/1P2KPB1/1NB2R2 w - - 1 23", 3),
         ("6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1", 1),
         ("6rk/6pp/8/6N1/8/8/8/6KR w - - 0 1", 1),
     ]
     for fen, want_plies in fixtures:
         board = chess.Board(fen)
-        check("mate fixture legal", not board.is_game_over(), fen)
+        check("mate fixture legal", board.is_valid() and not board.is_game_over(),
+              fen)
+        check("mate fixture avoids the endgame probe",
+              chess.popcount(board.occupied) > 5, fen)
         actual = _brute_force_mate_plies(board, 3)
         check("fixture mate distance verified", actual == want_plies,
               f"{fen} stated {want_plies} brute force {actual}")

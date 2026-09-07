@@ -182,7 +182,7 @@ def test_tracker_repetition():
 def main():
     deep = "--deep" in sys.argv
     t0 = time.perf_counter()
-    core.warmup()
+    core.warmup(compile_perft=True)
     print(f"warmup {time.perf_counter() - t0:.1f}s")
     test_bit_primitives()
     test_perft_suite(deep)

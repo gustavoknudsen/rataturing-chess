@@ -941,16 +941,28 @@ def print_board(bb, st):
           f"fifty {int(st[FIFTY])} hash {int(bb[HASH]):016x}")
 
 
-def warmup():
-    """Compile every jitted function with production argument types. On the
-    platform this runs at import, inside the 90 s init budget."""
+def warmup(compile_perft=False):
+    """Compile the jitted functions the agent uses, with production argument
+    types. On the platform this runs at import, inside the 90 s init budget,
+    so it deliberately does NOT compile perft: that is a test-only function
+    and compiling it would spend init budget the agent never gets back.
+    Tests pass compile_perft=True."""
     import numba
     assert not numba.config.DISABLE_JIT, "numba JIT is disabled"
     bb, st = new_board()
     undo_bb, undo_st, mls = new_stacks()
     parse_fen(START_FEN, bb, st)
-    total = perft(bb, st, undo_bb, undo_st, mls, 2, 0)
-    assert total == 400, f"warmup perft(2) = {total}, expected 400"
+    legal = 0
+    count = generate_moves(bb, st, mls[0])
+    for i in range(count):
+        if make_move(bb, st, undo_bb, undo_st, 0, int(mls[0, i])):
+            unmake(bb, st, undo_bb, undo_st, 0)
+            legal += 1
+    assert legal == 20, f"warmup legal moves = {legal}, expected 20"
     assert generate_captures(bb, st, mls[0]) == 0
     assert count_bits(bb[OCC_A]) == 32
     assert generate_hash_key(bb, st) == bb[HASH]
+    assert see_ge(bb, st, int(mls[0, 0]), 0) in (0, 1)
+    if compile_perft:
+        total = perft(bb, st, undo_bb, undo_st, mls, 2, 0)
+        assert total == 400, f"warmup perft(2) = {total}, expected 400"

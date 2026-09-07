@@ -21,6 +21,7 @@ MAX_UNZIPPED_BYTES = 50_000_000
 SHIP = [
     "agent.py",
     "btc_core.py",
+    "btc_endgame.py",
     "btc_eval.py",
     "btc_evalmasks.py",
     "btc_game.py",

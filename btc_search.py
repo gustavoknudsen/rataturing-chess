@@ -35,6 +35,20 @@ def _flag(name):
     return os.environ.get(name, "1") == "1"
 
 
+def _tune(name, default):
+    """Tunable search constant, frozen into the compiled code at import.
+
+    Every one of these came from BTC, where they were tuned at C node counts.
+    We search roughly 4-5 plies shallower, and the depth-gated heuristics cover
+    a much larger fraction of a shallower tree, so the values are very unlikely
+    to be optimal here. tune.py sweeps them against the arena.
+    """
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return type(default)(raw)
+
+
 MINIMAL = os.environ.get("BTC_MINIMAL") == "1"
 USE_TT = not MINIMAL and _flag("BTC_TT")
 USE_NULL = not MINIMAL and _flag("BTC_NULL")
@@ -71,6 +85,23 @@ SCORE_BAD_CAPTURE = -1_000_000
 
 HIST_MAX = 8192
 
+# Tunable search constants. Defaults are BTC's values; see _tune above for why
+# they are unlikely to be optimal at our node counts.
+LMR_BASE = _tune("BTC_LMR_BASE", 0.7844)
+LMR_DIV = _tune("BTC_LMR_DIV", 2.4696)
+LMR_HIST_DIV = _tune("BTC_LMR_HIST_DIV", 4096)
+LMR_MIN_MOVES = _tune("BTC_LMR_MIN_MOVES", 5)
+LMR_MIN_DEPTH = _tune("BTC_LMR_MIN_DEPTH", 2)
+LMP_BASE = _tune("BTC_LMP_BASE", 3)
+LMP_MAX_DEPTH = _tune("BTC_LMP_MAX_DEPTH", 8)
+FUTILITY_MARGIN = _tune("BTC_FUT_MARGIN", 184)
+FUTILITY_MAX_DEPTH = _tune("BTC_FUT_MAX_DEPTH", 6)
+RFP_MARGIN = _tune("BTC_RFP_MARGIN", 168)
+RFP_MAX_DEPTH = _tune("BTC_RFP_MAX_DEPTH", 3)
+NULL_REDUCTION = _tune("BTC_NULL_R", 2)
+NULL_MIN_DEPTH = _tune("BTC_NULL_MIN_DEPTH", 3)
+ASPIRATION_DELTA = _tune("BTC_ASP_DELTA", 77)
+
 # LMR: Ethereal-style base reduction table, indexed [depth][move index].
 # Precomputed at import because log() per node is wasted work.
 LMR_MAX_DEPTH = 64
@@ -78,7 +109,7 @@ LMR_MAX_MOVES = 64
 _LMR = np.zeros((LMR_MAX_DEPTH, LMR_MAX_MOVES), dtype=np.int64)
 for _d in range(1, LMR_MAX_DEPTH):
     for _m in range(1, LMR_MAX_MOVES):
-        _LMR[_d, _m] = int(0.7844 + np.log(_d) * np.log(_m) / 2.4696)
+        _LMR[_d, _m] = int(LMR_BASE + np.log(_d) * np.log(_m) / LMR_DIV)
 LMR_TABLE = _LMR
 
 SC_NODES, SC_STOP, SC_TT_GEN = 0, 1, 2
@@ -652,8 +683,8 @@ def _node_prologue(alpha, beta, depth, ply, rep_idx, pv_node, bb, st, undo_bb,
     improving = _improving(static_evals, ev, ply, in_check)
     quiet_node = not pv_node and not in_check
 
-    if USE_RFP and depth < 3 and quiet_node and abs(beta) < MATE_SCORE:
-        margin = 168 * (depth - improving)
+    if USE_RFP and depth < RFP_MAX_DEPTH and quiet_node and abs(beta) < MATE_SCORE:
+        margin = RFP_MARGIN * (depth - improving)
         if ev - margin >= beta:
             return (NODE_RETURN, ev - margin, alpha, beta, depth, tt_move,
                     in_check, ev, improving)
@@ -684,10 +715,11 @@ def _skip_quiet(mv, depth, moves_searched, improving, ev, alpha, pv_node,
         return False
     if abs(alpha) >= MATE_SCORE:
         return False
-    if USE_LMP and depth <= 8 \
-            and moves_searched >= c_div(3 + depth * depth, 2 - improving):
+    if USE_LMP and depth <= LMP_MAX_DEPTH \
+            and moves_searched >= c_div(LMP_BASE + depth * depth, 2 - improving):
         return True
-    if USE_FUTILITY and depth <= 6 and ev + 184 * depth <= alpha:
+    if USE_FUTILITY and depth <= FUTILITY_MAX_DEPTH \
+            and ev + FUTILITY_MARGIN * depth <= alpha:
         return True
     return False
 
@@ -696,7 +728,8 @@ def _skip_quiet(mv, depth, moves_searched, improving, ev, alpha, pv_node,
 def _lmr_reduction(mv, depth, moves_searched, improving, in_check,
                    opp_in_check, pv_node, main_hist, cont_hist, played, ply):
     """Reduction for this move, or -1 when LMR does not apply."""
-    if not USE_LMR or moves_searched < 5 or depth < 2 or in_check or pv_node:
+    if not USE_LMR or moves_searched < LMR_MIN_MOVES or depth < LMR_MIN_DEPTH \
+            or in_check or pv_node:
         return -1
     if (mv & (1 << 20)) or ((mv & 0xF0000) >> 16):
         return 2 if opp_in_check else 3
@@ -705,7 +738,7 @@ def _lmr_reduction(mv, depth, moves_searched, improving, in_check,
     reduction = LMR_TABLE[d, m]
     hist = int64(main_hist[(mv & 0xF000) >> 12, (mv & 0xFC0) >> 6]) \
         + _cont_hist_score(cont_hist, played, ply, mv)
-    reduction -= c_div(hist, 4096)
+    reduction -= c_div(hist, LMR_HIST_DIV)
     if not improving:
         reduction += 1
     if opp_in_check:
@@ -730,10 +763,10 @@ def negamax(alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls,
         return qsearch(alpha, beta, bb, st, undo_bb, undo_st, mls, scores,
                        cap_hist, sc, fc, ply)
 
-    if USE_NULL and depth >= 3 and not in_check and ply:
+    if USE_NULL and depth >= NULL_MIN_DEPTH and not in_check and ply:
         saved_ep, saved_hash = _make_null(bb, st, rep, rep_idx)
         played[ply + 1] = 0
-        score = -negamax(-beta, -beta + 1, depth - 1 - 2, ply + 1,
+        score = -negamax(-beta, -beta + 1, depth - 1 - NULL_REDUCTION, ply + 1,
                          rep_idx + 1, bb, st, undo_bb, undo_st, mls, scores,
                          killers, main_hist, cap_hist, cont_hist, counters,
                          played, static_evals, pv_table, pv_len, rep, tt_key,
@@ -902,7 +935,7 @@ def _adjusted_soft(soft_ms, stable_count, score_drop):
 
 
 def _aspiration_search(state, bb, st, prev_score, depth, rep_base):
-    delta = 77
+    delta = ASPIRATION_DELTA
     # A window centred on a mate score lets TT entries for longer mates cut
     # off inside it, so the root can drift from mate in 3 to mate in 7.
     # Search mate scores with a full window instead.

@@ -13,8 +13,18 @@ on BTC's unified scale (pawn = 126 midgame) from white's point of view until
 the final flip.
 """
 
+import os
+
 import numpy as np
 from numba import int64, njit, uint64
+
+# Compile budget is a live constraint (see docs/PROGRESS.md), so the heavier
+# optional terms are toggleable and can be cut without touching the code.
+# Threats is on: it scored 63.3% over 30 games once the specialised endgames
+# were in place (50.0% without them, because it inflates the score in won
+# positions and that hid mates), and its own compile cost is ~1 s.
+USE_THREATS = os.environ.get("BTC_THREATS", "1") == "1"
+USE_ENDGAMES = os.environ.get("BTC_ENDGAMES", "1") == "1"
 
 from btc_core import (
     B, BLACK, K, N, OCC_A, OCC_B, OCC_W, ONE, P, Q, R, SIDE, WHITE, ZERO,
@@ -27,6 +37,8 @@ from btc_evalmasks import (
     LINE, PHALANX, RANK_MASK, RANK_OF, RELATIVE_RANK, WHITE_FORWARD_FILE,
     WHITE_KING_ZONE, WHITE_PASSED, WHITE_SUPPORT,
 )
+from btc_endgame import insufficient_material
+from btc_endgame import probe as endgame_probe
 from btc_psqt import MIRROR, PIECE_TABLES
 
 TEMPO = 28
@@ -107,6 +119,42 @@ UNBLOCKED_STORM = np.array([
 
 LONG_DIAGONALS = uint64(0x8142241818244281)
 CENTER = uint64(0x0000001818000000)
+
+# Polynomial material imbalance, indexed [piece1][piece2][phase].
+# Piece index 0 is the "bishop pair" pseudo-piece, then P N B R Q as 1..5.
+QUADRATIC_OURS = np.array([
+    [[1419, 1455], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+    [[101, 28], [37, 39], [0, 0], [0, 0], [0, 0], [0, 0]],
+    [[57, 64], [249, 187], [-49, -62], [0, 0], [0, 0], [0, 0]],
+    [[0, 0], [118, 137], [10, 27], [0, 0], [0, 0], [0, 0]],
+    [[-63, -68], [-5, 3], [100, 81], [132, 118], [-246, -244], [0, 0]],
+    [[-210, -211], [37, 14], [147, 141], [161, 105], [-158, -174], [-9, -31]],
+], dtype=np.int64)
+
+QUADRATIC_THEIRS = np.array([
+    [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+    [[33, 30], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+    [[46, 18], [106, 84], [0, 0], [0, 0], [0, 0], [0, 0]],
+    [[75, 35], [59, 44], [60, 15], [0, 0], [0, 0], [0, 0]],
+    [[26, 35], [6, 22], [38, 39], [-12, -2], [0, 0], [0, 0]],
+    [[97, 93], [100, 163], [-58, -91], [112, 192], [276, 225], [0, 0]],
+], dtype=np.int64)
+
+SPACE_THRESHOLD = 11551
+
+# Threats, indexed by victim piece type (P N B R Q).
+THREAT_BY_MINOR_MG = np.array([6, 64, 82, 103, 81, 0], dtype=np.int64)
+THREAT_BY_MINOR_EG = np.array([37, 50, 57, 130, 163, 0], dtype=np.int64)
+THREAT_BY_ROOK_MG = np.array([54, 56, 66, 86, 0, 0], dtype=np.int64)
+THREAT_BY_ROOK_EG = np.array([42, 43, 44, 60, 0, 0], dtype=np.int64)
+THREAT_BY_KING_MG, THREAT_BY_KING_EG = 24, 87
+HANGING_MG, HANGING_EG = 72, 40
+RESTRICTED_MG, RESTRICTED_EG = 6, 7
+THREAT_BY_SAFE_PAWN_MG, THREAT_BY_SAFE_PAWN_EG = 167, 99
+WEAK_QUEEN_PROTECTION_MG, WEAK_QUEEN_PROTECTION_EG = 14, 0
+THREAT_BY_PAWN_PUSH_MG, THREAT_BY_PAWN_PUSH_EG = 48, 39
+KNIGHT_ON_QUEEN_MG, KNIGHT_ON_QUEEN_EG = 16, 11
+SLIDER_ON_QUEEN_MG, SLIDER_ON_QUEEN_EG = 62, 21
 
 
 @njit(cache=False, fastmath=True)
@@ -469,26 +517,169 @@ def _side_score(bb, side, phase, own_pawn_att, enemy_pawn_att, enemy_pawn_span,
 
 
 @njit(cache=False, fastmath=True)
-def _all_attacks(bb, side):
+def _accumulate(bb, side):
+    """Attack sets for one side. Returns
+    (minor, rook, queen, king, all, doubly attacked).
+    Computed once and shared by king safety and threats; the C engine rebuilt
+    equivalent tables inside every makeMove instead."""
     occ = bb[OCC_A]
     base = 0 if side == WHITE else 6
-    attacks, _ = _pawn_attacks_of(bb, side)
+    pawn_att, pawn_double = _pawn_attacks_of(bb, side)
+
+    all_att = pawn_att
+    double = pawn_double
+    knight_att = ZERO
+    bishop_att = ZERO
+    rook_att = ZERO
+    queen_att = ZERO
+    king_att = ZERO
+
     for pt in range(N, K + 1):
         pieces = bb[base + pt]
         while pieces:
             sq = lsb(pieces)
             pieces &= pieces - ONE
             if pt == N:
-                attacks |= KNIGHT_ATTACKS[sq]
+                att = KNIGHT_ATTACKS[sq]
+                knight_att |= att
             elif pt == B:
-                attacks |= bishop_attacks(sq, occ)
+                att = bishop_attacks(sq, occ)
+                bishop_att |= att
             elif pt == R:
-                attacks |= rook_attacks(sq, occ)
+                att = rook_attacks(sq, occ)
+                rook_att |= att
             elif pt == Q:
-                attacks |= queen_attacks(sq, occ)
+                att = queen_attacks(sq, occ)
+                queen_att |= att
             else:
-                attacks |= KING_ATTACKS[sq]
-    return attacks
+                att = KING_ATTACKS[sq]
+                king_att |= att
+            double |= all_att & att
+            all_att |= att
+    return (knight_att, bishop_att, rook_att, queen_att, king_att, all_att,
+            double)
+
+
+@njit(cache=False, fastmath=True)
+def _queen_threats(bb, us, our_knight, our_bishop, our_rook, our_double,
+                   strongly_protected_them, area):
+    """Squares from which we could fork or hit a lone enemy queen next move.
+    Returns (knight hits, slider hits, doubled weight)."""
+    them_base = 6 if us == WHITE else 0
+    our_base = 0 if us == WHITE else 6
+    enemy_queen = bb[them_base + Q]
+    if count_bits(enemy_queen) != 1:
+        return 0, 0, 1
+    weight = 2 if count_bits(bb[Q] | bb[Q + 6]) == 1 else 1
+    qsq = lsb(enemy_queen)
+    occ = bb[OCC_A]
+    safe_sq = area & ~bb[our_base + P] & ~strongly_protected_them
+    knight_hits = count_bits(our_knight & KNIGHT_ATTACKS[qsq] & safe_sq)
+    slider = (our_bishop & bishop_attacks(qsq, occ)) \
+        | (our_rook & rook_attacks(qsq, occ))
+    slider_hits = count_bits(slider & safe_sq & our_double)
+    return knight_hits, slider_hits, weight
+
+
+@njit(cache=False, fastmath=True)
+def _pawn_push_threats(bb, us, our_all, their_all, their_pawn_att,
+                       non_pawn_enemies):
+    """Enemy pieces attacked by a pawn we could safely push next move."""
+    our_base = 0 if us == WHITE else 6
+    empty = ~bb[OCC_A]
+    pawns = bb[our_base + P]
+    if us == WHITE:
+        pushes = (pawns >> uint64(8)) & empty
+        pushes |= ((pushes & RANK_MASK[5]) >> uint64(8)) & empty
+    else:
+        pushes = (pawns << uint64(8)) & empty
+        pushes |= ((pushes & RANK_MASK[2]) << uint64(8)) & empty
+    pushes &= ~their_pawn_att & (~their_all | our_all)
+    threatened = ZERO
+    while pushes:
+        sq = lsb(pushes)
+        pushes &= pushes - ONE
+        threatened |= PAWN_ATTACKS[us, sq]
+    return count_bits(threatened & non_pawn_enemies)
+
+
+@njit(cache=False, fastmath=True)
+def _threats(bb, us, phase, our_knight, our_bishop, our_rook, our_king,
+             our_all, our_double, their_all, their_pawn_att, their_double,
+             their_queen_att, area):
+    """Threats from `us`'s point of view, ported from BTC evaluateThreats
+    (evaluation.h): threats by minor, rook and king on weak or defended
+    enemies, hanging pieces, pieces protected only by the enemy queen,
+    restricted enemy mobility, threats by safe pawns and by safe pawn pushes,
+    and knight/slider forks against a lone enemy queen."""
+    our_minor = our_knight | our_bishop
+    them_base = 6 if us == WHITE else 0
+    our_base = 0 if us == WHITE else 6
+    enemy_occ = bb[OCC_B] if us == WHITE else bb[OCC_W]
+    non_pawn_enemies = enemy_occ & ~bb[them_base + P]
+
+    strongly_protected_them = their_pawn_att | (their_double & ~our_double)
+    weak = enemy_occ & ~strongly_protected_them & our_all
+    defended = non_pawn_enemies & strongly_protected_them
+
+    mg = 0
+    eg = 0
+    if defended | weak:
+        targets = (defended | weak) & our_minor
+        for pt in range(P, K):
+            hits = count_bits(targets & bb[them_base + pt])
+            if hits:
+                mg += THREAT_BY_MINOR_MG[pt] * hits
+                eg += THREAT_BY_MINOR_EG[pt] * hits
+        targets = weak & our_rook
+        for pt in range(P, K):
+            hits = count_bits(targets & bb[them_base + pt])
+            if hits:
+                mg += THREAT_BY_ROOK_MG[pt] * hits
+                eg += THREAT_BY_ROOK_EG[pt] * hits
+        if weak & our_king:
+            mg += THREAT_BY_KING_MG
+            eg += THREAT_BY_KING_EG
+        hanging = weak & (~their_all | (non_pawn_enemies & our_double))
+        hits = count_bits(hanging)
+        mg += HANGING_MG * hits
+        eg += HANGING_EG * hits
+        hits = count_bits(weak & their_queen_att)
+        mg += WEAK_QUEEN_PROTECTION_MG * hits
+        eg += WEAK_QUEEN_PROTECTION_EG * hits
+
+    restricted = their_all & ~strongly_protected_them & our_all
+    hits = count_bits(restricted)
+    mg += RESTRICTED_MG * hits
+    eg += RESTRICTED_EG * hits
+
+    # threats from pawns that are themselves reasonably safe
+    safe = ~their_all | our_all
+    our_pawns = bb[our_base + P]
+    pawn_threat = ZERO
+    tmp = our_pawns & safe
+    while tmp:
+        sq = lsb(tmp)
+        tmp &= tmp - ONE
+        pawn_threat |= PAWN_ATTACKS[us, sq]
+    hits = count_bits(pawn_threat & non_pawn_enemies)
+    mg += THREAT_BY_SAFE_PAWN_MG * hits
+    eg += THREAT_BY_SAFE_PAWN_EG * hits
+
+    hits = _pawn_push_threats(bb, us, our_all, their_all, their_pawn_att,
+                              non_pawn_enemies)
+    mg += THREAT_BY_PAWN_PUSH_MG * hits
+    eg += THREAT_BY_PAWN_PUSH_EG * hits
+
+    knight_hits, slider_hits, weight = _queen_threats(
+        bb, us, our_knight, our_bishop, our_rook, our_double,
+        strongly_protected_them, area)
+    mg += KNIGHT_ON_QUEEN_MG * knight_hits * weight
+    eg += KNIGHT_ON_QUEEN_EG * knight_hits * weight
+    mg += SLIDER_ON_QUEEN_MG * slider_hits * weight
+    eg += SLIDER_ON_QUEEN_EG * slider_hits * weight
+
+    return _taper(mg, eg, phase)
 
 
 @njit(cache=False, fastmath=True)
@@ -520,9 +711,71 @@ def _king_safety(bb, side, phase, attack_units, attackers, king_ring_attacks,
     return _taper(mg, eg, phase)
 
 
+# The twelve imbalance piece counts are each below 16, so they pack into one
+# integer as 4-bit fields. This keeps the term allocation-free on the hot path.
+@njit(cache=False, fastmath=True)
+def _count_of(packed, side, pt):
+    return int64((packed >> uint64(side * 24 + pt * 4)) & uint64(0xF))
+
+
+@njit(cache=False, fastmath=True)
+def _clamp15(v):
+    return 15 if v > 15 else v
+
+
+@njit(cache=False, fastmath=True)
+def _pack_side(bb, base, shift):
+    bishops = count_bits(bb[base + B])
+    packed = uint64(1 if bishops > 1 else 0) << uint64(shift)
+    packed |= uint64(_clamp15(count_bits(bb[base + P]))) << uint64(shift + 4)
+    packed |= uint64(_clamp15(count_bits(bb[base + N]))) << uint64(shift + 8)
+    packed |= uint64(_clamp15(bishops)) << uint64(shift + 12)
+    packed |= uint64(_clamp15(count_bits(bb[base + R]))) << uint64(shift + 16)
+    packed |= uint64(_clamp15(count_bits(bb[base + Q]))) << uint64(shift + 20)
+    return packed
+
+
+@njit(cache=False, fastmath=True)
+def _pack_counts(bb):
+    return _pack_side(bb, 0, 0) | _pack_side(bb, 6, 24)
+
+
+@njit(cache=False, fastmath=True)
+def _imbalance_side(packed, us, phase_idx):
+    them = 1 - us
+    bonus = 0
+    for pt1 in range(6):
+        count1 = _count_of(packed, us, pt1)
+        if count1 == 0:
+            continue
+        v = QUADRATIC_OURS[pt1, pt1, phase_idx] * count1
+        for pt2 in range(pt1):
+            v += QUADRATIC_OURS[pt1, pt2, phase_idx] * _count_of(packed, us, pt2) \
+                + QUADRATIC_THEIRS[pt1, pt2, phase_idx] * _count_of(packed, them, pt2)
+        bonus += count1 * v
+    return bonus
+
+
+@njit(cache=False, fastmath=True)
+def _imbalance(bb, phase):
+    """Piece-pair polynomial imbalance, from white's point of view. Subsumes
+    the bishop pair via the index 0 pseudo-piece."""
+    packed = _pack_counts(bb)
+    mg = c_div(_imbalance_side(packed, WHITE, 0) - _imbalance_side(packed, BLACK, 0), 16)
+    eg = c_div(_imbalance_side(packed, WHITE, 1) - _imbalance_side(packed, BLACK, 1), 16)
+    return _taper(mg, eg, phase)
+
+
 @njit(cache=False, fastmath=True)
 def evaluate(bb, st):
     """Full evaluation from the side to move's point of view."""
+    if USE_ENDGAMES:
+        if insufficient_material(bb):
+            return 0
+        handled, exact = endgame_probe(bb, st)
+        if handled:
+            return exact if st[SIDE] == WHITE else -exact
+
     phase = game_phase(bb)
 
     white_pawn_att, _ = _pawn_attacks_of(bb, WHITE)
@@ -541,8 +794,10 @@ def evaluate(bb, st):
         bb, BLACK, phase, black_pawn_att, white_pawn_att, white_span,
         black_area, black_blockers)
 
-    white_attacks = _all_attacks(bb, WHITE)
-    black_attacks = _all_attacks(bb, BLACK)
+    (w_knight, w_bishop, w_rook, w_queen, w_king, white_attacks,
+     w_double) = _accumulate(bb, WHITE)
+    (b_knight, b_bishop, b_rook, b_queen, b_king, black_attacks,
+     b_double) = _accumulate(bb, BLACK)
 
     # danger to white's king comes from black's attack accumulation
     white_score += _king_safety(bb, WHITE, phase, b_units, b_attackers,
@@ -553,7 +808,18 @@ def evaluate(bb, st):
     white_score += _shelter_storm(bb, WHITE, lsb(bb[K]))
     black_score += _shelter_storm(bb, BLACK, lsb(bb[K + 6]))
 
+    if USE_THREATS:
+        white_score += _threats(bb, WHITE, phase, w_knight, w_bishop, w_rook,
+                                w_king, white_attacks, w_double,
+                                black_attacks, black_pawn_att, b_double,
+                                b_queen, white_area)
+        black_score += _threats(bb, BLACK, phase, b_knight, b_bishop, b_rook,
+                                b_king, black_attacks, b_double,
+                                white_attacks, white_pawn_att, w_double,
+                                w_queen, black_area)
+
     score = white_score - black_score
+    score += _imbalance(bb, phase)
     if st[SIDE] == WHITE:
         return score + TEMPO
     return -score + TEMPO
