@@ -20,6 +20,8 @@ Probe scripts: scratchpad `exp2_numba_recursion.py`, `exp3_numba_state.py`,
 | Reading a module-global numpy array inside njit | ✅ frozen by reference, fine for constant tables (attack tables, PST, masks) |
 | Mutating an array passed as an argument | ✅ zero-copy reference semantics, visible outside and across nested njit calls |
 | uint64 ⊕ int64 / uint64 ⊕ literal arithmetic | stayed exact in all probes (`(1<<63)|1` round-trips `+1`, shifts, masks) — numba 0.67/numpy 2.5 NEP-50 rules. **Discipline stays**: bitboards uint64, indices int64, explicit `uint64()` casts at every mixing point, because one silent float64 promotion anywhere = wrong perft. Perft is the guard. |
+| **`int(x)` on uint64 is NOT a cast** | measured in phase 2: numba types `int(uint64_expr)` as **uint64**, and a later branch/ternary unification of int64 with uint64 silently promotes to **float64** (surfaced as a bizarre TypingError deep in the TT pack). The promotion trap is real but strikes via type *unification*, not arithmetic. Rule: cast with `numba.int64(...)` explicitly wherever a uint64-derived value flows into signed integer context. |
+| Recursive fn + typing failure diagnosis | when a big recursive njit function fails to type with nonsense float64 errors, bisect bottom-up: compile leaf helpers standalone with known int args; the poison is usually a helper, not the recursion. Eager signatures do not fix a helper's internal mistyping. |
 | `import numba` cost | 0.25 s (+0.10 s numpy) |
 | Eager signature compile (small fn) | 0.03 s |
 
