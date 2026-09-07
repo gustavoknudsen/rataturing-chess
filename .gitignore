@@ -2,3 +2,6 @@
 __pycache__/
 *.pyc
 submission.zip
+
+baseline_p2/
+openings.json

@@ -53,8 +53,8 @@ def baseline_move(fen, _time_left_ms):
     return best.uci()
 
 
-def play_game(white_fn, black_fn, base_ms, increment_ms):
-    board = chess.Board()
+def play_game(white_fn, black_fn, base_ms, increment_ms, start_fen=None):
+    board = chess.Board(start_fen) if start_fen else chess.Board()
     clocks = {chess.WHITE: float(base_ms), chess.BLACK: float(base_ms)}
     movers = {chess.WHITE: white_fn, chess.BLACK: black_fn}
     while True:
@@ -84,14 +84,21 @@ def main():
     base_ms = int(sys.argv[2]) if len(sys.argv) > 2 else 10000
     import agent
 
+    # rated games start from curated positions, never the standard start
+    import openings as opening_book
+    book = opening_book.load()
+
     score = 0.0
     for game in range(games):
         ours_white = game % 2 == 0
+        opening = book[(game // 2) % len(book)]
         if ours_white:
-            result, term = play_game(agent.get_move, baseline_move, base_ms, 100)
+            result, term = play_game(agent.get_move, baseline_move, base_ms,
+                                     100, opening)
             ours = result
         else:
-            result, term = play_game(baseline_move, agent.get_move, base_ms, 100)
+            result, term = play_game(baseline_move, agent.get_move, base_ms,
+                                     100, opening)
             ours = 1.0 - result
         score += ours
         colour = "white" if ours_white else "black"

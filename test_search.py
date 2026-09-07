@@ -52,7 +52,8 @@ def check(name, ok, detail=""):
 
 
 @njit(cache=False)
-def _ref_qsearch(alpha, beta, bb, st, undo_bb, undo_st, mls, scores, ply):
+def _ref_qsearch(alpha, beta, bb, st, undo_bb, undo_st, mls, scores, cap_hist,
+                 ply):
     if ply > se.MAX_SEARCH_PLY - 1:
         return se.evaluate(bb, st)
     ev = se.evaluate(bb, st)
@@ -61,14 +62,14 @@ def _ref_qsearch(alpha, beta, bb, st, undo_bb, undo_st, mls, scores, ply):
     if ev > alpha:
         alpha = ev
     cnt = core.generate_captures(bb, st, mls[ply])
-    # MVV/LVA ordering is value-neutral for alpha-beta; without it the
-    # reference explodes exponentially on sharp positions
-    se._sort_captures(bb, st, mls[ply], scores[ply], cnt)
+    # ordering is value-neutral for alpha-beta; without it the reference
+    # explodes exponentially on sharp positions
+    se._sort_captures(bb, st, mls[ply], scores[ply], cnt, cap_hist)
     for i in range(cnt):
         if core.make_move(bb, st, undo_bb, undo_st, ply, mls[ply, i]) == 0:
             continue
         score = -_ref_qsearch(-beta, -alpha, bb, st, undo_bb, undo_st, mls,
-                              scores, ply + 1)
+                              scores, cap_hist, ply + 1)
         core.unmake(bb, st, undo_bb, undo_st, ply)
         if score > alpha:
             alpha = score
@@ -79,14 +80,14 @@ def _ref_qsearch(alpha, beta, bb, st, undo_bb, undo_st, mls, scores, ply):
 
 @njit(cache=False)
 def _ref_negamax(alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st,
-                 mls, scores, rep):
+                 mls, scores, cap_hist, rep):
     """Plain fail-hard alpha-beta, no ordering, no TT, no pruning. Mirrors
     only the value-affecting rules: draws, in-check extension, qsearch."""
     if ply and (se._is_repetition(bb, rep, rep_idx) or st[core.FIFTY] >= 100):
         return 0
     if depth == 0:
         return _ref_qsearch(alpha, beta, bb, st, undo_bb, undo_st, mls,
-                            scores, ply)
+                            scores, cap_hist, ply)
     if ply > se.MAX_SEARCH_PLY - 1:
         return se.evaluate(bb, st)
     in_check = se._in_check(bb, st)
@@ -100,7 +101,8 @@ def _ref_negamax(alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st,
             continue
         legal += 1
         score = -_ref_negamax(-beta, -alpha, depth - 1, ply + 1, rep_idx + 1,
-                              bb, st, undo_bb, undo_st, mls, scores, rep)
+                              bb, st, undo_bb, undo_st, mls, scores, cap_hist,
+                              rep)
         core.unmake(bb, st, undo_bb, undo_st, ply)
         if score > alpha:
             alpha = score
@@ -111,8 +113,28 @@ def _ref_negamax(alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st,
     return alpha
 
 
+NODE_BUDGET_FEN = "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10"
+NODE_BUDGET_DEPTH = 7
+
+
 def _fresh_state():
     return se.SearchState(tt_entries=1 << 16)
+
+
+def _nodes_at_fixed_depth(fen, depth):
+    """Nodes to complete a fixed-depth search from a cold state."""
+    state = _fresh_state()
+    bb, st = core.new_board()
+    core.parse_fen(fen, bb, st)
+    keys = np.array([bb[core.HASH]], dtype=np.uint64)
+    _, _, _, nodes = se.search_position(state, bb, st, keys, 1, 0, 600000,
+                                        max_depth=depth)
+    return nodes
+
+
+def _report_minimal_nodes(_max_depth):
+    nodes = _nodes_at_fixed_depth(NODE_BUDGET_FEN, NODE_BUDGET_DEPTH)
+    print(f"MINIMAL_NODES {nodes}", flush=True)
 
 
 def _searched_value(state, fen, depth):
@@ -123,9 +145,11 @@ def _searched_value(state, fen, depth):
     state.rep[0] = bb[core.HASH]
     return se.negamax(-se.INFINITY, se.INFINITY, depth, 0, 1, bb, st,
                       state.undo_bb, state.undo_st, state.mls, state.scores,
-                      state.killers, state.main_hist, state.static_evals,
-                      state.pv_table, state.pv_len, state.rep, state.tt_key,
-                      state.tt_data, state.sc, state.fc)
+                      state.killers, state.main_hist, state.cap_hist,
+                      state.cont_hist, state.counters, state.played,
+                      state.static_evals, state.pv_table, state.pv_len,
+                      state.rep, state.tt_key, state.tt_data, state.sc,
+                      state.fc)
 
 
 def _reference_value(fen, depth):
@@ -133,10 +157,11 @@ def _reference_value(fen, depth):
     core.parse_fen(fen, bb, st)
     undo_bb, undo_st, mls = core.new_stacks()
     scores = np.zeros((core.MAX_PLY, 256), dtype=np.int64)
+    cap_hist = np.zeros((12, 64, 12), dtype=np.int16)
     rep = np.zeros(256, dtype=np.uint64)
     rep[0] = bb[core.HASH]
     return _ref_negamax(-se.INFINITY, se.INFINITY, depth, 0, 1, bb, st,
-                        undo_bb, undo_st, mls, scores, rep)
+                        undo_bb, undo_st, mls, scores, cap_hist, rep)
 
 
 def run_reference_mode(max_depth):
@@ -153,6 +178,7 @@ def run_reference_mode(max_depth):
                   f"{fen.split()[0]} got {got} want {want}")
         print(f"  ref {fen.split()[0][:20]} {time.perf_counter() - t0:.1f}s",
               flush=True)
+    _report_minimal_nodes(max_depth)
     print(f"reference mode: {passed} passed, {failed} failed")
     sys.exit(1 if failed else 0)
 
@@ -228,6 +254,89 @@ def test_fifty_move():
     fresh = "4k3/8/8/8/8/8/8/R3K3 w Q - 0 1"
     mv, score, depth, nodes = _search_fen(fresh, 0, 1500, max_depth=8)
     check("rook-up position wins without fifty", score > 300, f"score {score}")
+
+
+def _forces_mate(board, plies):
+    if plies <= 0:
+        return False
+    for mv in board.legal_moves:
+        board.push(mv)
+        if board.is_checkmate():
+            board.pop()
+            return True
+        deeper = (plies >= 3 and not board.is_game_over()
+                  and _all_replies_lose(board, plies - 1))
+        board.pop()
+        if deeper:
+            return True
+    return False
+
+
+def _all_replies_lose(board, plies):
+    replies = list(board.legal_moves)
+    if not replies:
+        return False
+    for mv in replies:
+        board.push(mv)
+        ok = _forces_mate(board, plies - 1)
+        board.pop()
+        if not ok:
+            return False
+    return True
+
+
+def _brute_force_mate_plies(board, max_plies):
+    for n in range(1, max_plies + 1):
+        if _forces_mate(board, n):
+            return n
+    return None
+
+
+def test_pruning_safety():
+    """Pruning and reductions must not lose forced mates. LMR/LMP/futility
+    bugs show up as a mate the unpruned search finds and the pruned one
+    misses. Each fixture's mate distance is confirmed by an independent
+    brute-force solver, so a mis-stated position fails instead of hiding."""
+    fixtures = [
+        ("7k/8/8/8/8/8/R7/1R5K w - - 0 1", 3),
+        ("6k1/8/8/8/8/8/8/K2R3R w - - 0 1", 3),
+        ("6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1", 1),
+        ("6rk/6pp/8/6N1/8/8/8/6KR w - - 0 1", 1),
+    ]
+    for fen, want_plies in fixtures:
+        board = chess.Board(fen)
+        check("mate fixture legal", not board.is_game_over(), fen)
+        actual = _brute_force_mate_plies(board, 3)
+        check("fixture mate distance verified", actual == want_plies,
+              f"{fen} stated {want_plies} brute force {actual}")
+        mv, score, depth, nodes = _search_fen(fen, 0, 8000, max_depth=12)
+        plies = se.MATE_VALUE - score
+        check("forced mate still found with pruning on",
+              score > se.MATE_SCORE and plies <= want_plies,
+              f"{fen} score {score} plies {plies} want <= {want_plies}")
+
+
+def _parse_minimal_nodes(stdout):
+    for line in stdout.splitlines():
+        if line.startswith("MINIMAL_NODES"):
+            return int(line.split()[1])
+    return None
+
+
+def test_pruning_effect(ref_stdout):
+    """Every pruning feature has to actually fire. Comparing nodes for the
+    same fixed-depth search against the all-pruning-off build catches a
+    feature that silently never triggers or that explodes the tree."""
+    minimal_nodes = _parse_minimal_nodes(ref_stdout)
+    check("minimal node count reported", minimal_nodes is not None)
+    if minimal_nodes is None:
+        return
+    full_nodes = _nodes_at_fixed_depth(NODE_BUDGET_FEN, NODE_BUDGET_DEPTH)
+    ratio = full_nodes / max(minimal_nodes, 1)
+    print(f"nodes depth {NODE_BUDGET_DEPTH}: pruning off {minimal_nodes}, "
+          f"on {full_nodes}, ratio {ratio:.2f}")
+    check("pruning reduces the tree", ratio < 0.75,
+          f"minimal {minimal_nodes} full {full_nodes} ratio {ratio:.2f}")
 
 
 def test_time_discipline():
@@ -321,6 +430,8 @@ def main():
     test_mates()
     test_repetition_draw()
     test_fifty_move()
+    test_pruning_safety()
+    test_pruning_effect(ref.stdout)
     test_time_discipline()
     test_sanity_depth()
     test_agent_game()

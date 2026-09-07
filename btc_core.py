@@ -392,6 +392,101 @@ def get_castle_flag(mv):
     return mv & CASTLE_FLAG
 
 
+SEE_VALUE = np.array([100, 305, 333, 563, 950, 32000] * 2, dtype=np.int64)
+
+
+@njit(cache=False, fastmath=True)
+def attackers_to(bb, sq, occ):
+    """All pieces of either colour attacking sq, using occ for slider blockers."""
+    return ((PAWN_ATTACKS[BLACK, sq] & bb[P])
+            | (PAWN_ATTACKS[WHITE, sq] & bb[p])
+            | (KNIGHT_ATTACKS[sq] & (bb[N] | bb[n]))
+            | (KING_ATTACKS[sq] & (bb[K] | bb[k]))
+            | (bishop_attacks(sq, occ) & (bb[B] | bb[b] | bb[Q] | bb[q]))
+            | (rook_attacks(sq, occ) & (bb[R] | bb[r] | bb[Q] | bb[q])))
+
+
+@njit(cache=False, fastmath=True)
+def _least_valuable_attacker(bb, side_attackers, stm):
+    """Cheapest attacker piece index in side_attackers, or -1 for king only."""
+    base = 0 if stm == WHITE else 6
+    for ptype in range(P, K):
+        if side_attackers & bb[base + ptype]:
+            return base + ptype
+    return -1
+
+
+@njit(cache=False, fastmath=True)
+def _see_recompute_xrays(bb, attackers, to, occ, ptype):
+    """Add sliders revealed behind the piece just removed from occ."""
+    if ptype == P or ptype == B:
+        attackers |= bishop_attacks(to, occ) & (bb[B] | bb[b] | bb[Q] | bb[q])
+    elif ptype == R:
+        attackers |= rook_attacks(to, occ) & (bb[R] | bb[r] | bb[Q] | bb[q])
+    elif ptype == Q:
+        attackers |= (bishop_attacks(to, occ) & (bb[B] | bb[b] | bb[Q] | bb[q])) \
+            | (rook_attacks(to, occ) & (bb[R] | bb[r] | bb[Q] | bb[q]))
+    return attackers
+
+
+@njit(cache=False, fastmath=True)
+def see_ge(bb, st, mv, threshold):
+    """Static exchange evaluation, Stockfish-style null-window swap.
+    Returns 1 if the exchange on the target square is worth >= threshold.
+    En passant, castling and promotions are approximated as SEE = 0, matching
+    the C engine (conservative enough for bad-capture filtering)."""
+    if (mv & EP_FLAG) or (mv & CASTLE_FLAG) or ((mv & 0xF0000) >> 16):
+        return 1 if 0 >= threshold else 0
+
+    src = mv & 0x3F
+    to = (mv & 0xFC0) >> 6
+    attacker = (mv & 0xF000) >> 12
+    side = st[SIDE]
+
+    captured = -1
+    start_enemy = p if side == WHITE else P
+    to_bit = ONE << uint64(to)
+    for bp in range(start_enemy, start_enemy + 6):
+        if bb[bp] & to_bit:
+            captured = bp
+            break
+
+    gain = SEE_VALUE[captured] if captured >= 0 else 0
+    swap = gain - threshold
+    if swap < 0:
+        return 0
+    swap = SEE_VALUE[attacker] - swap
+    if swap <= 0:
+        return 1
+
+    occ = bb[OCC_A] ^ (ONE << uint64(src)) ^ to_bit
+    attackers = attackers_to(bb, to, occ)
+    stm = side
+    res = 1
+
+    while True:
+        stm ^= 1
+        attackers &= occ
+        my_pieces = bb[OCC_W] if stm == WHITE else bb[OCC_B]
+        side_attackers = attackers & my_pieces
+        if not side_attackers:
+            break
+        res ^= 1
+        piece = _least_valuable_attacker(bb, side_attackers, stm)
+        if piece < 0:
+            # king capture is illegal while the opponent still attacks the square
+            return (res ^ 1) if (attackers & ~my_pieces) else res
+        ptype = piece % 6
+        swap = SEE_VALUE[ptype] - swap
+        if swap < res:
+            break
+        piece_bb = side_attackers & bb[piece]
+        occ ^= piece_bb & (ZERO - piece_bb)
+        attackers = _see_recompute_xrays(bb, attackers, to, occ, ptype)
+
+    return res
+
+
 @njit(cache=False, fastmath=True)
 def _add_promotions(ml, cnt, src, tgt, pawn, base, cap):
     for pt in (Q, R, N, B):

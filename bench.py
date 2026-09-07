@@ -9,17 +9,37 @@ import subprocess
 import sys
 import time
 
+# The number that matters is the agent's full init: importing agent.py compiles
+# the entire engine (core, search and evaluation) via its warm-up search. A
+# core-only warm-up badly understates it.
 COLD_SNIPPET = (
+    "import time, os, sys; "
+    "t = time.perf_counter(); "
+    "sys.stdout = open(os.devnull, 'w'); "
+    "import agent; "
+    "sys.stdout = sys.__stdout__; "
+    "print(f'{time.perf_counter() - t:.2f}')"
+)
+
+CORE_SNIPPET = (
     "import time; t = time.perf_counter(); "
     "import btc_core; btc_core.warmup(); "
     "print(f'{time.perf_counter() - t:.2f}')"
 )
 
 
-def measure_cold_import():
-    out = subprocess.run([sys.executable, "-c", COLD_SNIPPET],
+def _timed_subprocess(snippet):
+    out = subprocess.run([sys.executable, "-c", snippet],
                          capture_output=True, text=True, check=True)
     return float(out.stdout.strip().splitlines()[-1])
+
+
+def measure_cold_import():
+    return _timed_subprocess(COLD_SNIPPET)
+
+
+def measure_core_import():
+    return _timed_subprocess(CORE_SNIPPET)
 
 
 def measure_perft(fen, depth, expected):
@@ -61,8 +81,13 @@ def rss_mb():
     return pmc.WorkingSetSize / (1024 * 1024)
 
 
+INIT_BUDGET_S = 90.0
+LOCAL_CEILING_S = 65.0
+
+
 def main():
     cold = measure_cold_import()
+    core_only = measure_core_import()
 
     import btc_core as core
     core.warmup()
@@ -76,11 +101,17 @@ def main():
     except Exception:
         mem = "n/a"
 
-    print(f"cold import + warmup: {cold:.2f}s (ceiling 65s)")
+    print(f"agent init (full engine compile): {cold:.2f}s "
+          f"(local ceiling {LOCAL_CEILING_S:.0f}s, platform budget "
+          f"{INIT_BUDGET_S:.0f}s)")
+    print(f"  of which core only:             {core_only:.2f}s")
     print(f"perft(5) startpos:    {n1} nodes in {t1:.2f}s")
     print(f"perft(4) kiwipete:    {n2} nodes in {t2:.2f}s")
     print(f"perft NPS:            {nps:,.0f}")
     print(f"working set:          {mem}")
+    if cold > LOCAL_CEILING_S:
+        print(f"WARNING agent init {cold:.1f}s exceeds the {LOCAL_CEILING_S:.0f}s "
+              f"local ceiling; the match core is slower than this machine")
 
 
 if __name__ == "__main__":
