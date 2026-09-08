@@ -25,6 +25,7 @@ from numba import int64, njit, uint64
 # positions and that hid mates), and its own compile cost is ~1 s.
 USE_THREATS = os.environ.get("BTC_THREATS", "1") == "1"
 USE_ENDGAMES = os.environ.get("BTC_ENDGAMES", "1") == "1"
+USE_SPACE = os.environ.get("BTC_SPACE", "1") == "1"
 
 from btc_core import (
     B, BLACK, K, N, OCC_A, OCC_B, OCC_W, ONE, P, Q, R, SIDE, WHITE, ZERO,
@@ -32,7 +33,7 @@ from btc_core import (
     lsb, queen_attacks, rook_attacks,
 )
 from btc_evalmasks import (
-    ADJACENT_FILES, BETWEEN, BLACK_FORWARD_FILE, BLACK_KING_ZONE,
+    ADJACENT_FILES, BETWEEN, BLACK_FORWARD_FILE, BLACK_KING_ZONE, CENTER_FILES,
     BLACK_PASSED, BLACK_SUPPORT, FILE_MASK, FILE_OF, ISOLATED, KING_FLANK,
     LINE, PHALANX, RANK_MASK, RANK_OF, RELATIVE_RANK, WHITE_FORWARD_FILE,
     WHITE_KING_ZONE, WHITE_PASSED, WHITE_SUPPORT,
@@ -741,6 +742,44 @@ def _pack_counts(bb):
 
 
 @njit(cache=False, fastmath=True)
+def _space(bb, us, phase, their_pawn_att, their_all, white_pawn_double,
+           black_pawn_double):
+    """Safe central squares in our own half, weighted by how crowded and how
+    blocked the position is. Middlegame only: the caller tapers it away."""
+    if phase < SPACE_THRESHOLD:
+        return 0
+    our_base = 0 if us == WHITE else 6
+    our_pawns = bb[our_base + P]
+    if us == WHITE:
+        rank_mask = RANK_MASK[6] | RANK_MASK[5] | RANK_MASK[4]
+    else:
+        rank_mask = RANK_MASK[1] | RANK_MASK[2] | RANK_MASK[3]
+    space_mask = CENTER_FILES & rank_mask
+    safe_area = space_mask & ~our_pawns & ~their_pawn_att
+
+    behind = our_pawns
+    if us == WHITE:
+        behind |= behind << uint64(8)
+        behind |= behind << uint64(16)
+    else:
+        behind |= behind >> uint64(8)
+        behind |= behind >> uint64(16)
+
+    bonus = count_bits(safe_area) \
+        + count_bits(behind & safe_area & ~their_all)
+
+    # blocked pawns are counted for both colours regardless of `us`: a pawn
+    # whose front square holds an enemy pawn or is covered by two enemy pawns
+    blocked = count_bits((bb[P] >> uint64(8)) & (bb[P + 6] | black_pawn_double)) \
+        + count_bits((bb[P + 6] << uint64(8)) & (bb[P] | white_pawn_double))
+    if blocked > 9:
+        blocked = 9
+    own_occ = bb[OCC_W] if us == WHITE else bb[OCC_B]
+    weight = count_bits(own_occ) - 3 + blocked
+    return c_div(bonus * weight * weight, 16)
+
+
+@njit(cache=False, fastmath=True)
 def _imbalance_side(packed, us, phase_idx):
     them = 1 - us
     bonus = 0
@@ -778,8 +817,8 @@ def evaluate(bb, st):
 
     phase = game_phase(bb)
 
-    white_pawn_att, _ = _pawn_attacks_of(bb, WHITE)
-    black_pawn_att, _ = _pawn_attacks_of(bb, BLACK)
+    white_pawn_att, white_pawn_double = _pawn_attacks_of(bb, WHITE)
+    black_pawn_att, black_pawn_double = _pawn_attacks_of(bb, BLACK)
     white_span = _pawn_attack_span(bb, WHITE)
     black_span = _pawn_attack_span(bb, BLACK)
     white_blockers = _king_blockers(bb, WHITE)
@@ -820,6 +859,14 @@ def evaluate(bb, st):
 
     score = white_score - black_score
     score += _imbalance(bb, phase)
+
+    if USE_SPACE:
+        # middlegame term: taper it away toward the endgame
+        space = _space(bb, WHITE, phase, black_pawn_att, black_attacks,
+                       white_pawn_double, black_pawn_double) \
+            - _space(bb, BLACK, phase, white_pawn_att, white_attacks,
+                     white_pawn_double, black_pawn_double)
+        score += _taper(space, 0, phase)
     if st[SIDE] == WHITE:
         return score + TEMPO
     return -score + TEMPO

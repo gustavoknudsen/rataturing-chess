@@ -61,6 +61,14 @@ USE_FUTILITY = not MINIMAL and _flag("BTC_FUTILITY")
 USE_RAZOR = not MINIMAL and _flag("BTC_RAZOR")
 USE_IIR = not MINIMAL and _flag("BTC_IIR")
 USE_CONT_HIST = not MINIMAL and _flag("BTC_CONTHIST")
+# Singular extensions default OFF. On its own it is fine, and it measured
+# +20 elo over 120 games (interval -42 to +84, so no evidence of gain). But
+# combined with RFP_MARGIN=130 it breaks KBN vs K conversion: both prune or
+# extend more aggressively and together they cut the mating line
+# (test_convert.py, threefold repetition after 17 moves). RFP=130 has real
+# evidence behind it (+67, interval excluding zero), singular does not, so
+# singular is the one that goes. The code stays for BTC_SINGULAR=1.
+USE_SINGULAR = not MINIMAL and os.environ.get("BTC_SINGULAR", "0") == "1"
 USE_FULL_EVAL = _flag("BTC_EVAL")
 
 INFINITY = 50000
@@ -96,11 +104,21 @@ LMP_BASE = _tune("BTC_LMP_BASE", 3)
 LMP_MAX_DEPTH = _tune("BTC_LMP_MAX_DEPTH", 8)
 FUTILITY_MARGIN = _tune("BTC_FUT_MARGIN", 184)
 FUTILITY_MAX_DEPTH = _tune("BTC_FUT_MAX_DEPTH", 6)
-RFP_MARGIN = _tune("BTC_RFP_MARGIN", 168)
+# 130 rather than BTC's 168: a smaller margin makes the RFP cutoff easier, so
+# it prunes more, which our shallower search appears to want.
+#
+# Evidence, and a correction. A sweep of 11 candidates first showed 59.6% over
+# 120 games (+67 elo), but with 11 comparisons at p<0.05 about one false
+# positive is expected, and that result did not replicate. The honest number
+# comes from a dedicated head-to-head: 130 vs 168 over 300 games scored 54.3%,
+# +30 elo [-9, +70]. Positive across two samples and worth keeping, but half
+# the original claim and not formally significant.
+RFP_MARGIN = _tune("BTC_RFP_MARGIN", 130)
 RFP_MAX_DEPTH = _tune("BTC_RFP_MAX_DEPTH", 3)
 NULL_REDUCTION = _tune("BTC_NULL_R", 2)
 NULL_MIN_DEPTH = _tune("BTC_NULL_MIN_DEPTH", 3)
 ASPIRATION_DELTA = _tune("BTC_ASP_DELTA", 77)
+SINGULAR_MIN_DEPTH = _tune("BTC_SINGULAR_MIN_DEPTH", 8)
 
 # LMR: Ethereal-style base reduction table, indexed [depth][move index].
 # Precomputed at import because log() per node is wasted work.
@@ -269,6 +287,26 @@ def tt_probe(bb, alpha, beta, depth, ply, tt_key, tt_data):
                 return beta, move
         return NO_HASH_ENTRY, move
     return NO_HASH_ENTRY, 0
+
+
+@njit(cache=False, fastmath=True)
+def tt_peek(bb, ply, tt_key, tt_data):
+    """Raw entry for this position: (hit, depth, flag, ply-adjusted score).
+    Singular extensions need the stored bound even when it was too shallow to
+    produce a cutoff, which tt_probe does not expose."""
+    key = bb[HASH]
+    base = int64(key & uint64(tt_key.shape[0] // 4 - 1)) * 4
+    for i in range(4):
+        if tt_key[base + i] != key:
+            continue
+        data = tt_data[base + i]
+        score = _tt_score(data)
+        if score < -MATE_SCORE:
+            score += ply
+        if score > MATE_SCORE:
+            score -= ply
+        return 1, _tt_depth(data), _tt_flag(data), score
+    return 0, 0, 0, 0
 
 
 @njit(cache=False, fastmath=True)
@@ -634,9 +672,13 @@ def _razor(alpha, beta, depth, ev, bb, st, undo_bb, undo_st, mls, scores,
 
 @njit(cache=False, fastmath=True)
 def _prologue_head(alpha, beta, depth, ply, rep_idx, pv_node, bb, st, rep,
-                   tt_key, tt_data, sc, fc):
+                   tt_key, tt_data, sc, fc, excluded):
     """Draw rules, mate distance pruning, TT probe and leaf dispatch.
-    Returns (code, value, alpha, beta, tt_move)."""
+    Returns (code, value, alpha, beta, tt_move).
+
+    During a singular verification (excluded != 0) the TT cutoff is skipped:
+    the stored score was produced by a search that included the very move we
+    are now forbidding."""
     if ply and (_is_repetition(bb, rep, rep_idx) or st[FIFTY] >= 100):
         return NODE_RETURN, 0, alpha, beta, 0
 
@@ -649,7 +691,7 @@ def _prologue_head(alpha, beta, depth, ply, rep_idx, pv_node, bb, st, rep,
             return NODE_RETURN, alpha, alpha, beta, 0
 
     score, tt_move = tt_probe(bb, alpha, beta, depth, ply, tt_key, tt_data)
-    if ply and not pv_node and score != NO_HASH_ENTRY:
+    if excluded == 0 and ply and not pv_node and score != NO_HASH_ENTRY:
         return NODE_RETURN, score, alpha, beta, tt_move
 
     _check_time(sc, fc)
@@ -664,12 +706,15 @@ def _prologue_head(alpha, beta, depth, ply, rep_idx, pv_node, bb, st, rep,
 @njit(cache=False, fastmath=True)
 def _node_prologue(alpha, beta, depth, ply, rep_idx, pv_node, bb, st, undo_bb,
                    undo_st, mls, scores, cap_hist, rep, static_evals, tt_key,
-                   tt_data, sc, fc):
+                   tt_data, sc, fc, excluded):
     """Every non-recursive early exit of negamax, in BTC's order. Returns
-    (code, value, alpha, beta, depth, tt_move, in_check, ev, improving)."""
+    (code, value, alpha, beta, depth, tt_move, in_check, ev, improving).
+
+    A singular verification (excluded != 0) must reach the move loop, so RFP,
+    razoring and IIR are all skipped in that case."""
     code, value, alpha, beta, tt_move = _prologue_head(
         alpha, beta, depth, ply, rep_idx, pv_node, bb, st, rep, tt_key,
-        tt_data, sc, fc)
+        tt_data, sc, fc, excluded)
     if code != NODE_CONTINUE:
         return code, value, alpha, beta, depth, tt_move, 0, 0, 0
 
@@ -683,13 +728,14 @@ def _node_prologue(alpha, beta, depth, ply, rep_idx, pv_node, bb, st, undo_bb,
     improving = _improving(static_evals, ev, ply, in_check)
     quiet_node = not pv_node and not in_check
 
-    if USE_RFP and depth < RFP_MAX_DEPTH and quiet_node and abs(beta) < MATE_SCORE:
+    if USE_RFP and excluded == 0 and depth < RFP_MAX_DEPTH and quiet_node \
+            and abs(beta) < MATE_SCORE:
         margin = RFP_MARGIN * (depth - improving)
         if ev - margin >= beta:
             return (NODE_RETURN, ev - margin, alpha, beta, depth, tt_move,
                     in_check, ev, improving)
 
-    if USE_RAZOR and quiet_node and depth <= 3:
+    if USE_RAZOR and excluded == 0 and quiet_node and depth <= 3:
         done, value = _razor(alpha, beta, depth, ev, bb, st, undo_bb, undo_st,
                              mls, scores, cap_hist, sc, fc, ply)
         if done:
@@ -698,7 +744,7 @@ def _node_prologue(alpha, beta, depth, ply, rep_idx, pv_node, bb, st, undo_bb,
 
     # internal iterative reductions: no TT move at depth means this iteration
     # is cheap and only exists to populate the TT for the next one
-    if USE_IIR and ply > 0 and depth >= 6 and tt_move == 0:
+    if USE_IIR and excluded == 0 and ply > 0 and depth >= 6 and tt_move == 0:
         depth -= 1
 
     return (NODE_CONTINUE, 0, alpha, beta, depth, tt_move, in_check, ev,
@@ -749,28 +795,34 @@ def _lmr_reduction(mv, depth, moves_searched, improving, in_check,
 @njit(cache=False, fastmath=True)
 def negamax(alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls,
             scores, killers, main_hist, cap_hist, cont_hist, counters, played,
-            static_evals, pv_table, pv_len, rep, tt_key, tt_data, sc, fc):
+            static_evals, pv_table, pv_len, rep, tt_key, tt_data, sc, fc,
+            excluded):
+    """excluded != 0 means this is a singular verification: the same position
+    is searched with that one move forbidden, so the node must not take a TT
+    cutoff, prune with RFP/razoring/null move/LMP/futility, write the TT, or
+    trigger another singular check."""
     pv_len[ply] = ply
     pv_node = beta - alpha > 1
 
     code, value, alpha, beta, depth, tt_move, in_check, ev, improving = \
         _node_prologue(alpha, beta, depth, ply, rep_idx, pv_node, bb, st,
                        undo_bb, undo_st, mls, scores, cap_hist, rep,
-                       static_evals, tt_key, tt_data, sc, fc)
+                       static_evals, tt_key, tt_data, sc, fc, excluded)
     if code == NODE_RETURN:
         return value
     if code == NODE_QSEARCH:
         return qsearch(alpha, beta, bb, st, undo_bb, undo_st, mls, scores,
                        cap_hist, sc, fc, ply)
 
-    if USE_NULL and depth >= NULL_MIN_DEPTH and not in_check and ply:
+    if USE_NULL and excluded == 0 and depth >= NULL_MIN_DEPTH \
+            and not in_check and ply:
         saved_ep, saved_hash = _make_null(bb, st, rep, rep_idx)
         played[ply + 1] = 0
         score = -negamax(-beta, -beta + 1, depth - 1 - NULL_REDUCTION, ply + 1,
                          rep_idx + 1, bb, st, undo_bb, undo_st, mls, scores,
                          killers, main_hist, cap_hist, cont_hist, counters,
                          played, static_evals, pv_table, pv_len, rep, tt_key,
-                         tt_data, sc, fc)
+                         tt_data, sc, fc, 0)
         _unmake_null(bb, st, saved_ep, saved_hash)
         if sc[SC_STOP]:
             return 0
@@ -780,6 +832,32 @@ def negamax(alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls,
     cnt = generate_moves(bb, st, mls[ply])
     _sort_moves(bb, st, mls[ply], scores[ply], cnt, ply, tt_move, killers,
                 main_hist, cap_hist, cont_hist, counters, played)
+
+    # Singular extension: if the TT move is much better than every alternative
+    # at reduced depth, it is worth an extra ply. Verified by searching this
+    # same position with that move excluded, against a window just below the
+    # stored score; failing low there means nothing else comes close.
+    singular = 0
+    if USE_SINGULAR and excluded == 0 and ply > 0 and depth >= SINGULAR_MIN_DEPTH \
+            and tt_move != 0:
+        tt_hit, tt_d, tt_f, tt_s = tt_peek(bb, ply, tt_key, tt_data)
+        if tt_hit and tt_d >= depth - 3 and abs(tt_s) < MATE_SCORE \
+                and (tt_f == HASH_BETA or tt_f == HASH_EXACT):
+            singular_beta = tt_s - 2 * depth
+            verify = -1 + c_div(depth, 2)
+            sing_score = negamax(singular_beta - 1, singular_beta, verify, ply,
+                                 rep_idx, bb, st, undo_bb, undo_st, mls,
+                                 scores, killers, main_hist, cap_hist,
+                                 cont_hist, counters, played, static_evals,
+                                 pv_table, pv_len, rep, tt_key, tt_data, sc,
+                                 fc, tt_move)
+            # the verifier reuses this ply's PV slots; reset so its scratch
+            # line is not propagated upward
+            pv_len[ply] = ply
+            if sc[SC_STOP]:
+                return 0
+            if sing_score < singular_beta:
+                singular = 1
 
     hash_flag = HASH_ALPHA
     best_move = 0
@@ -792,53 +870,57 @@ def negamax(alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls,
 
     for i in range(cnt):
         mv = mls[ply, i]
+        if mv == excluded:
+            continue
         rep[rep_idx] = bb[HASH]
         if make_move(bb, st, undo_bb, undo_st, ply, mv) == 0:
             continue
         legal_count += 1
         opp_in_check = _in_check(bb, st)
 
-        if _skip_quiet(mv, depth, moves_searched, improving, ev, alpha,
-                       pv_node, in_check, opp_in_check):
+        if excluded == 0 and _skip_quiet(mv, depth, moves_searched, improving,
+                                         ev, alpha, pv_node, in_check,
+                                         opp_in_check):
             unmake(bb, st, undo_bb, undo_st, ply)
             continue
 
         played[ply + 1] = mv
+        new_depth = depth - 1 + (singular if mv == tt_move else 0)
 
         if moves_searched == 0:
-            score = -negamax(-beta, -alpha, depth - 1, ply + 1, rep_idx + 1,
+            score = -negamax(-beta, -alpha, new_depth, ply + 1, rep_idx + 1,
                              bb, st, undo_bb, undo_st, mls, scores, killers,
                              main_hist, cap_hist, cont_hist, counters, played,
                              static_evals, pv_table, pv_len, rep, tt_key,
-                             tt_data, sc, fc)
+                             tt_data, sc, fc, 0)
         else:
             reduction = _lmr_reduction(mv, depth, moves_searched, improving,
                                        in_check, opp_in_check, pv_node,
                                        main_hist, cont_hist, played, ply)
             if reduction >= 0:
-                reduced = depth - 1 - reduction
+                reduced = new_depth - reduction
                 if reduced < 1:
                     reduced = 1
                 score = -negamax(-alpha - 1, -alpha, reduced, ply + 1,
                                  rep_idx + 1, bb, st, undo_bb, undo_st, mls,
                                  scores, killers, main_hist, cap_hist,
                                  cont_hist, counters, played, static_evals,
-                                 pv_table, pv_len, rep, tt_key, tt_data, sc, fc)
+                                 pv_table, pv_len, rep, tt_key, tt_data, sc, fc, 0)
             else:
                 score = alpha + 1
             if score > alpha:
-                score = -negamax(-alpha - 1, -alpha, depth - 1, ply + 1,
+                score = -negamax(-alpha - 1, -alpha, new_depth, ply + 1,
                                  rep_idx + 1, bb, st, undo_bb, undo_st, mls,
                                  scores, killers, main_hist, cap_hist,
                                  cont_hist, counters, played, static_evals,
-                                 pv_table, pv_len, rep, tt_key, tt_data, sc, fc)
+                                 pv_table, pv_len, rep, tt_key, tt_data, sc, fc, 0)
                 if alpha < score < beta:
-                    score = -negamax(-beta, -alpha, depth - 1, ply + 1,
+                    score = -negamax(-beta, -alpha, new_depth, ply + 1,
                                      rep_idx + 1, bb, st, undo_bb, undo_st,
                                      mls, scores, killers, main_hist,
                                      cap_hist, cont_hist, counters, played,
                                      static_evals, pv_table, pv_len, rep,
-                                     tt_key, tt_data, sc, fc)
+                                     tt_key, tt_data, sc, fc, 0)
 
         unmake(bb, st, undo_bb, undo_st, ply)
         if sc[SC_STOP]:
@@ -862,8 +944,9 @@ def negamax(alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls,
                 pv_table[ply, next_ply] = pv_table[ply + 1, next_ply]
             pv_len[ply] = pv_len[ply + 1]
             if score >= beta:
-                tt_record(bb, beta, depth, HASH_BETA, mv, ply, tt_key,
-                          tt_data, int(sc[SC_TT_GEN]))
+                if excluded == 0:
+                    tt_record(bb, beta, depth, HASH_BETA, mv, ply, tt_key,
+                              tt_data, int(sc[SC_TT_GEN]))
                 _beta_cutoff_update(bb, st, mv, depth, ply, killers,
                                     main_hist, cap_hist, cont_hist, counters,
                                     played, quiets, quiet_cnt, captures,
@@ -871,10 +954,15 @@ def negamax(alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls,
                 return beta
 
     if legal_count == 0:
+        # inside a verification, "no legal moves" only means every move was
+        # the excluded one; that is not mate
+        if excluded != 0:
+            return alpha
         return -MATE_VALUE + ply if in_check else 0
 
-    tt_record(bb, alpha, depth, hash_flag, best_move, ply, tt_key, tt_data,
-              int(sc[SC_TT_GEN]))
+    if excluded == 0:
+        tt_record(bb, alpha, depth, hash_flag, best_move, ply, tt_key, tt_data,
+                  int(sc[SC_TT_GEN]))
     return alpha
 
 
@@ -915,7 +1003,7 @@ def _root_negamax(state, bb, st, alpha, beta, depth, rep_base):
                    state.main_hist, state.cap_hist, state.cont_hist,
                    state.counters, state.played, state.static_evals,
                    state.pv_table, state.pv_len, state.rep, state.tt_key,
-                   state.tt_data, state.sc, state.fc)
+                   state.tt_data, state.sc, state.fc, 0)
 
 
 def _is_slower_mate(best_score, new_score):

@@ -20,7 +20,6 @@ from btc_core import (
     lsb,
 )
 from btc_evalmasks import FILE_MASK, FILE_OF, RANK_OF, RELATIVE_RANK
-
 KNOWN_WIN = 10000
 MATE_SCORE = 48000
 
@@ -174,11 +173,18 @@ def probe(bb, st):
 
         s_counts = _side_counts(bb, strong)
         npm_strong = _non_pawn_material(bb, strong)
-        # KP vs K needs the bitbase the C engine generates; fall through
-        if s_counts[0] == 1 and npm_strong == 0:
-            continue
         s_king = lsb(bb[K]) if strong == WHITE else lsb(bb[K + 6])
         w_king = lsb(bb[K]) if weak == WHITE else lsb(bb[K + 6])
+
+        # KP vs K falls through to the normal evaluation. The bitbase exists
+        # and is correct (btc_kpk.py, test_kpk.py) but is not wired in: adding
+        # any call to the evaluate() chain costs ~13 s of local compile, about
+        # 25 s of the platform's 90 s init budget, because everything reachable
+        # from evaluate() is inlined into qsearch and negamax. KP vs K decides
+        # well under 1% of games and the passed-pawn and king-race terms
+        # approximate it, so the trade is bad.
+        if s_counts[0] == 1 and npm_strong == 0:
+            continue
 
         handled, score = _lone_king_case(bb, strong, s_counts, npm_strong,
                                          s_king, w_king)

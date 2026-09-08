@@ -149,7 +149,7 @@ def _searched_value(state, fen, depth):
                       state.cont_hist, state.counters, state.played,
                       state.static_evals, state.pv_table, state.pv_len,
                       state.rep, state.tt_key, state.tt_data, state.sc,
-                      state.fc)
+                      state.fc, 0)
 
 
 def _reference_value(fen, depth):
