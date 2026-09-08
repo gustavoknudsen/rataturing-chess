@@ -17,7 +17,7 @@ State layout:
 """
 
 import numpy as np
-from numba import njit, uint64
+from numba import int64, njit, uint64
 
 U64 = np.uint64
 
@@ -549,32 +549,36 @@ def _gen_pawn_captures(bb, st, ml, cnt, side):
 
 @njit(cache=False, fastmath=True)
 def _gen_castling(bb, st, ml, cnt, side):
+    """Castling moves. The attack tests take int64() squares rather than the
+    square constants: numba specialises on integer literals, and the literal
+    forms compiled six extra copies of is_under_attack and of the magic
+    attack helpers it calls. See docs/PROGRESS.md."""
     castle = st[CASTLE]
     occ_all = bb[OCC_A]
     if side == WHITE:
         if castle & WK_CASTLE:
             path = (ONE << uint64(f1)) | (ONE << uint64(g1))
-            if not (occ_all & path) and not is_under_attack(bb, e1, BLACK) \
-                    and not is_under_attack(bb, f1, BLACK):
+            if not (occ_all & path) and not is_under_attack(bb, int64(e1), int64(BLACK)) \
+                    and not is_under_attack(bb, int64(f1), int64(BLACK)):
                 ml[cnt] = e1 | (g1 << 6) | (K << 12) | CASTLE_FLAG
                 cnt += 1
         if castle & WQ_CASTLE:
             path = (ONE << uint64(d1)) | (ONE << uint64(c1)) | (ONE << uint64(b1))
-            if not (occ_all & path) and not is_under_attack(bb, e1, BLACK) \
-                    and not is_under_attack(bb, d1, BLACK):
+            if not (occ_all & path) and not is_under_attack(bb, int64(e1), int64(BLACK)) \
+                    and not is_under_attack(bb, int64(d1), int64(BLACK)):
                 ml[cnt] = e1 | (c1 << 6) | (K << 12) | CASTLE_FLAG
                 cnt += 1
         return cnt
     if castle & BK_CASTLE:
         path = (ONE << uint64(f8)) | (ONE << uint64(g8))
-        if not (occ_all & path) and not is_under_attack(bb, e8, WHITE) \
-                and not is_under_attack(bb, f8, WHITE):
+        if not (occ_all & path) and not is_under_attack(bb, int64(e8), int64(WHITE)) \
+                and not is_under_attack(bb, int64(f8), int64(WHITE)):
             ml[cnt] = e8 | (g8 << 6) | (k << 12) | CASTLE_FLAG
             cnt += 1
     if castle & BQ_CASTLE:
         path = (ONE << uint64(d8)) | (ONE << uint64(c8)) | (ONE << uint64(b8))
-        if not (occ_all & path) and not is_under_attack(bb, e8, WHITE) \
-                and not is_under_attack(bb, d8, WHITE):
+        if not (occ_all & path) and not is_under_attack(bb, int64(e8), int64(WHITE)) \
+                and not is_under_attack(bb, int64(d8), int64(WHITE)):
             ml[cnt] = e8 | (c8 << 6) | (k << 12) | CASTLE_FLAG
             cnt += 1
     return cnt

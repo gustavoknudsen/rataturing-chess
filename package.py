@@ -25,7 +25,10 @@ SHIP = [
     "btc_eval.py",
     "btc_evalmasks.py",
     "btc_game.py",
+    "btc_kpk.py",
+    "btc_kpk_data.py",
     "btc_psqt.py",
+    "btc_scale.py",
     "btc_search.py",
     "btc_time.py",
 ]

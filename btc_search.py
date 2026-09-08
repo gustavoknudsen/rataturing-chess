@@ -801,6 +801,11 @@ def negamax(alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls,
     is searched with that one move forbidden, so the node must not take a TT
     cutoff, prune with RFP/razoring/null move/LMP/futility, write the TT, or
     trigger another singular check."""
+    # int64(0), not the literal 0: numba specialises on integer literals, so
+    # a literal here compiled a second copy of this whole function for the
+    # singular-verification call site, which passes a real move.
+    no_excl = int64(0)
+
     pv_len[ply] = ply
     pv_node = beta - alpha > 1
 
@@ -822,7 +827,7 @@ def negamax(alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls,
                          rep_idx + 1, bb, st, undo_bb, undo_st, mls, scores,
                          killers, main_hist, cap_hist, cont_hist, counters,
                          played, static_evals, pv_table, pv_len, rep, tt_key,
-                         tt_data, sc, fc, 0)
+                         tt_data, sc, fc, no_excl)
         _unmake_null(bb, st, saved_ep, saved_hash)
         if sc[SC_STOP]:
             return 0
@@ -892,7 +897,7 @@ def negamax(alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls,
                              bb, st, undo_bb, undo_st, mls, scores, killers,
                              main_hist, cap_hist, cont_hist, counters, played,
                              static_evals, pv_table, pv_len, rep, tt_key,
-                             tt_data, sc, fc, 0)
+                             tt_data, sc, fc, no_excl)
         else:
             reduction = _lmr_reduction(mv, depth, moves_searched, improving,
                                        in_check, opp_in_check, pv_node,
@@ -905,7 +910,8 @@ def negamax(alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls,
                                  rep_idx + 1, bb, st, undo_bb, undo_st, mls,
                                  scores, killers, main_hist, cap_hist,
                                  cont_hist, counters, played, static_evals,
-                                 pv_table, pv_len, rep, tt_key, tt_data, sc, fc, 0)
+                                 pv_table, pv_len, rep, tt_key, tt_data,
+                                 sc, fc, no_excl)
             else:
                 score = alpha + 1
             if score > alpha:
@@ -913,14 +919,15 @@ def negamax(alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls,
                                  rep_idx + 1, bb, st, undo_bb, undo_st, mls,
                                  scores, killers, main_hist, cap_hist,
                                  cont_hist, counters, played, static_evals,
-                                 pv_table, pv_len, rep, tt_key, tt_data, sc, fc, 0)
+                                 pv_table, pv_len, rep, tt_key, tt_data,
+                                 sc, fc, no_excl)
                 if alpha < score < beta:
                     score = -negamax(-beta, -alpha, new_depth, ply + 1,
                                      rep_idx + 1, bb, st, undo_bb, undo_st,
                                      mls, scores, killers, main_hist,
                                      cap_hist, cont_hist, counters, played,
                                      static_evals, pv_table, pv_len, rep,
-                                     tt_key, tt_data, sc, fc, 0)
+                                     tt_key, tt_data, sc, fc, no_excl)
 
         unmake(bb, st, undo_bb, undo_st, ply)
         if sc[SC_STOP]:

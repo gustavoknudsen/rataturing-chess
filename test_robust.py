@@ -12,11 +12,22 @@ plausible evaluation gain, so this hunts failure modes rather than strength:
 4. Tracker integrity across a game, including the desync-and-recover path.
 """
 
+import os
 import random
+import subprocess
 import sys
 import time
 
 import chess
+
+STARVED = """
+import chess
+import agent
+board = chess.Board()
+uci = agent.get_move(board.fen(), 120000)
+assert chess.Move.from_uci(uci) in board.legal_moves, "illegal move"
+print("STARVED_OK")
+"""
 
 AWKWARD = [
     # one legal move
@@ -153,9 +164,32 @@ def test_tracker_recovers(agent):
     check("tracker: recovers back to the original game", ok, uci)
 
 
+def test_starved_warmup():
+    """A warmup that cannot finish must degrade, never raise.
+
+    search_position fixes its stop time before its first njit call, and that
+    call is where the whole numba compile happens, so any deadline shorter
+    than the compile makes the warmup return depth 0. That is exactly what
+    crashed the platform upload on 2026-09-08: an exception during import is
+    an immediate loss. It passed locally because this machine compiles inside
+    a budget the platform's slower core blew. Runs in a subprocess because the
+    condition only exists before anything is compiled.
+    """
+    env = dict(os.environ, BTC_WARMUP_HARD_MS="1")
+    here = os.path.dirname(os.path.abspath(__file__))
+    out = subprocess.run([sys.executable, "-c", STARVED], capture_output=True,
+                         text=True, cwd=here, env=env, timeout=1800)
+    check("starved warmup degrades instead of crashing",
+          out.returncode == 0 and "STARVED_OK" in out.stdout,
+          out.stderr[-400:])
+
+
 def main():
     games = int(sys.argv[1]) if len(sys.argv) > 1 else 6
     positions = int(sys.argv[2]) if len(sys.argv) > 2 else 120
+
+    test_starved_warmup()
+    print(f"starved warmup done ({passed} passed)", flush=True)
 
     t0 = time.perf_counter()
     import agent

@@ -5,8 +5,29 @@ the wall the search never crosses. OVERHEAD_MS covers FEN parsing, tracker
 work, the python-chess safety net and referee measurement slack; calibrate it
 from the platform validation log."""
 
+import os
+
 OVERHEAD_MS = 120
-MTG = 30
+
+# Assumed moves remaining, the divisor for the whole scheme.
+#
+# 30 is BTC's value and is measurably too conservative here: simulating a
+# 60-move game at 120s+0.5s leaves 12.6 s unused when the search spends its
+# full soft budget, and 28.9 s when the stable-move rule in _adjusted_soft
+# takes its 30% off, which is most moves. The engine plays whole games at
+# about three quarters of the clock it is entitled to. 24 recovers most of
+# that and still finishes an 80-move game with 10 s in hand.
+#
+# Confirmed at the real control: 50 games of MTG=24 against MTG=30 at
+# 120s+0.5s scored 56.0%, +42 elo [-34, +118], likelihood of superiority 86%,
+# and critically **zero losses on time** and no fifty-move or repetition
+# artefacts. The elo interval spans zero, so the strength claim is unproven;
+# what the match establishes is that spending the extra clock is safe, and
+# more time at the same node rate is the most reliable gain in computer chess.
+# Sweep further with BTC_MTG, but re-check for flags before shipping a lower
+# value: 21 leaves only 0.6 s at move 100 if the search spends its full soft
+# budget every move.
+MTG = int(os.environ.get("BTC_MTG", "24"))
 
 
 def budget(time_left_ms, move_number, increment_ms=500):

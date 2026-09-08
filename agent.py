@@ -6,6 +6,7 @@ compilation of the whole engine via a warmup search, and table construction.
 A python-chess legality check wraps every result so no failure path can
 return an illegal move."""
 
+import os
 import time
 
 _import_started = time.perf_counter()
@@ -21,17 +22,30 @@ STATE = search.SearchState()
 TRACKER = btc_game.GameTracker()
 BB, ST = core.new_board()
 
+# Effectively no deadline, in ms. Large enough that the warmup can never be
+# cut short by compilation, small enough to stay well inside float64 precision
+# when added to perf_counter. Overridable only so the tests can force a
+# starved warmup and prove it degrades instead of crashing.
+HARD_MS_NONE = int(os.environ.get("BTC_WARMUP_HARD_MS", "3600000"))
+
 
 def _warmup():
     core.warmup()
     core.parse_fen(core.START_FEN, BB, ST)
     keys = STATE.rep[:1].copy()
     keys[0] = BB[core.HASH]
-    # generous deadline: the first call pays the whole numba compile, and the
-    # depth-4 shakedown search must actually run after it
+    # No time limit. search_position turns hard_ms into an absolute wall-clock
+    # deadline before its first njit call, and that call is where the whole
+    # numba compile happens, so any finite budget is spent on compilation and
+    # the search aborts at depth 1. This warmup is bounded by max_depth
+    # instead. A 60 s budget here passed locally and crashed on the platform,
+    # whose core is slower, once the engine grew past it.
     mv, score, depth, nodes = search.search_position(
-        STATE, BB, ST, keys, 1, soft_ms=0, hard_ms=60000, max_depth=4)
-    assert depth == 4 and nodes > 0, "warmup search did not complete"
+        STATE, BB, ST, keys, 1, soft_ms=0, hard_ms=HARD_MS_NONE, max_depth=4)
+    if depth != 4 or nodes <= 0:
+        # Never fatal: an exception here loses the game outright, while a
+        # partial warmup only means some compilation lands on the first move.
+        print(f"warmup incomplete: depth {depth} nodes {nodes}")
     STATE.main_hist[:] = 0
     STATE.tt_key[:] = 0
     STATE.tt_data[:] = 0

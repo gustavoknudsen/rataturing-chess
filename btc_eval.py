@@ -26,6 +26,7 @@ from numba import int64, njit, uint64
 USE_THREATS = os.environ.get("BTC_THREATS", "1") == "1"
 USE_ENDGAMES = os.environ.get("BTC_ENDGAMES", "1") == "1"
 USE_SPACE = os.environ.get("BTC_SPACE", "1") == "1"
+USE_SCALE = os.environ.get("BTC_SCALE", "1") == "1"
 
 from btc_core import (
     B, BLACK, K, N, OCC_A, OCC_B, OCC_W, ONE, P, Q, R, SIDE, WHITE, ZERO,
@@ -33,13 +34,16 @@ from btc_core import (
     lsb, queen_attacks, rook_attacks,
 )
 from btc_evalmasks import (
-    ADJACENT_FILES, BETWEEN, BLACK_FORWARD_FILE, BLACK_KING_ZONE, CENTER_FILES,
+    ADJACENT_FILES, BETWEEN, BLACK_FORWARD_FILE, BLACK_KING_ZONE, CAMP,
+    CENTER_FILES,
     BLACK_PASSED, BLACK_SUPPORT, FILE_MASK, FILE_OF, ISOLATED, KING_FLANK,
-    LINE, PHALANX, RANK_MASK, RANK_OF, RELATIVE_RANK, WHITE_FORWARD_FILE,
+    FORWARD_RANKS, LINE, PHALANX, RANK_MASK, RANK_OF, RELATIVE_RANK,
+    WHITE_FORWARD_FILE,
     WHITE_KING_ZONE, WHITE_PASSED, WHITE_SUPPORT,
 )
 from btc_endgame import insufficient_material
 from btc_endgame import probe as endgame_probe
+from btc_scale import endgame_scale
 from btc_psqt import MIRROR, PIECE_TABLES
 
 TEMPO = 28
@@ -80,6 +84,10 @@ DOUBLED_MG, DOUBLED_EG = -11, -51
 ISOLATED_MG, ISOLATED_EG = -1, -20
 BACKWARD_MG, BACKWARD_EG = -6, -19
 WEAK_UNOPPOSED_MG, WEAK_UNOPPOSED_EG = -15, -18
+DOUBLED_EARLY_MG, DOUBLED_EARLY_EG = -17, -7
+WEAK_LEVER_MG, WEAK_LEVER_EG = -2, -57
+# blocked pawn on the 5th and 6th relative rank, {mg, eg}; subtracted
+BLOCKED_PAWN = np.array([[19, 8], [7, -3]], dtype=np.int64)
 
 SEMI_OPEN_MG, SEMI_OPEN_EG = 18, 7
 OPEN_MG, OPEN_EG = 44, 20
@@ -93,9 +101,13 @@ MINOR_BEHIND_PAWN_MG, MINOR_BEHIND_PAWN_EG = 18, 3
 KING_PROTECTOR_KNIGHT_MG, KING_PROTECTOR_KNIGHT_EG = 9, 9
 KING_PROTECTOR_BISHOP_MG, KING_PROTECTOR_BISHOP_EG = 7, 9
 LONG_DIAGONAL_BISHOP_MG = 45
-
-KING_ATTACK_WEIGHTS = np.array([0, 76, 46, 45, 14, 0], dtype=np.int64)
-SAFE_CHECK_MG = np.array([0, 805, 650, 1071, 730, 0], dtype=np.int64)
+ROOK_CLOSED_MG, ROOK_CLOSED_EG = 10, 5
+BISHOP_XRAY_MG, BISHOP_XRAY_EG = 4, 5
+# pawns on the bishop's own colour, indexed by the bishop's distance to an edge
+BISHOP_PAWNS_MG = np.array([3, 3, 2, 3], dtype=np.int64)
+BISHOP_PAWNS_EG = np.array([8, 9, 7, 7], dtype=np.int64)
+LIGHT_SQUARES = uint64(0x55AA55AA55AA55AA)
+DARK_SQUARES = uint64(0xAA55AA55AA55AA55)
 
 KD_WEAK_RING = 183
 KD_UNSAFE_CHECK = 148
@@ -103,6 +115,16 @@ KD_KING_ATTACKS = 69
 KD_FLANK_ATTACK = 3
 KD_NO_QUEEN = 873
 KD_INIT = 37
+KD_BLOCKER = 98
+KD_KNIGHT_DEFENSE = 100
+KD_SHELTER = 6
+KD_FLANK_DEFENSE = 4
+PAWNLESS_FLANK_MG, PAWNLESS_FLANK_EG = 19, 97
+# king-ring attacker weight and safe-check bonus, indexed by piece type
+# {P, N, B, R, Q, K}; safe check is {single, multiple}
+KING_ATTACK_WEIGHTS = np.array([0, 76, 46, 45, 14, 0], dtype=np.int64)
+SAFE_CHECK = np.array([[0, 0], [805, 1292], [650, 984], [1071, 1886],
+                       [730, 1128], [0, 0]], dtype=np.int64)
 
 SHELTER_STRENGTH = np.array([
     [-6, 81, 93, 58, 39, 18, 25],
@@ -173,12 +195,43 @@ def _taper(mg, eg, phase):
 
 
 @njit(cache=False, fastmath=True)
+def _stage_value(mg, eg, phase, stage):
+    """BTC only interpolates inside the middlegame band.
+
+    Outside it the raw table entry for that stage is used, so above
+    OPENING_PHASE material a piece is worth its opening value rather than an
+    extrapolation of it. The port tapered unconditionally, which cost about 14
+    per queen and 10 per rook whenever the piece count was above the band -
+    which is most of the opening and early middlegame. `stage` is 0 opening,
+    1 endgame, 2 middlegame, matching PIECE_TABLES' first index."""
+    if stage == 2:
+        return _taper(mg, eg, phase)
+    return mg if stage == 0 else eg
+
+
+@njit(cache=False, fastmath=True)
+def game_stage(phase):
+    if phase > OPENING_PHASE:
+        return 0
+    if phase < ENDGAME_PHASE:
+        return 1
+    return 2
+
+
+@njit(cache=False, fastmath=True)
 def game_phase(bb):
+    """Non-pawn material on both sides, BTC's getGameStageScore.
+
+    Deliberately unclamped. The starting position holds 16604, above
+    OPENING_PHASE of 15196, and BTC feeds that raw value to interpolate(), so
+    a term is extrapolated past its own middlegame value while the queens are
+    still on: interpolate(mg, eg, 16604) is mg*1.093 - eg*0.093. Clamping here
+    made every tapered term disagree with BTC in the opening and early
+    middlegame. Only the endgame scale factor floors the weight, and it does
+    that itself."""
     score = 0
     for pc in range(N, Q + 1):
         score += (count_bits(bb[pc]) + count_bits(bb[pc + 6])) * MATERIAL_MG[pc]
-    if score > OPENING_PHASE:
-        score = OPENING_PHASE
     return score
 
 
@@ -283,17 +336,19 @@ def _piece_mobility(bb, piece_type, sq, side, area, blockers):
 
 
 @njit(cache=False, fastmath=True)
-def _passed_pawn(bb, sq, side, phase, enemy_king_sq, own_king_sq):
+def _passed_pawn(bb, sq, side, phase, enemy_king_sq, own_king_sq,
+                 own_pawn_att, own_attacks, enemy_attacks):
     """Passed pawn bonus by relative rank and file, with a king-race term in
     the endgame. Returns 0 when the pawn is not passed."""
     enemy_pawns = bb[P + 6] if side == WHITE else bb[P]
     mask = WHITE_PASSED[sq] if side == WHITE else BLACK_PASSED[sq]
     if enemy_pawns & mask:
         return 0
-    own_pawns = bb[P] if side == WHITE else bb[P + 6]
     front = WHITE_FORWARD_FILE[sq] if side == WHITE else BLACK_FORWARD_FILE[sq]
-    if own_pawns & front:
-        return 0
+    # No doubled-pawn exclusion: BTC tests only enemy pawns in the span, so a
+    # pawn with a friendly pawn ahead of it on the same file still scores as
+    # passed. The port used to return 0 there, which silently deleted the term
+    # for the rear pawn of every doubled passer.
 
     rr = RELATIVE_RANK[side, sq]
     mg = PASSED_RANK_MG[rr]
@@ -306,10 +361,70 @@ def _passed_pawn(bb, sq, side, phase, enemy_king_sq, own_king_sq):
     if rr > 2:
         push = sq - 8 if side == WHITE else sq + 8
         if 0 <= push <= 63:
-            enemy_dist = _chebyshev(enemy_king_sq, push)
-            own_dist = _chebyshev(own_king_sq, push)
-            eg += 19 * enemy_dist - 8 * own_dist
+            # BTC weights the whole king race by rank: w = 5r - 13, which runs
+            # 2, 7, 12, 17 as the pawn advances. The port previously dropped w
+            # and folded a constant 4 into the coefficients (19/4 -> 19,
+            # 2 -> 8), which is right only at r == 3 and undervalues an
+            # advanced passer badly: a pawn on the 7th was worth 323 here
+            # against BTC's 611.
+            w = 5 * rr - 13
+            enemy_dist = _king_proximity(enemy_king_sq, push)
+            own_dist = _king_proximity(own_king_sq, push)
+            eg += (enemy_dist * 19 // 4 - own_dist * 2) * w
+            # the square two ahead, so our king is rewarded for escorting
+            # rather than merely reaching the stop square
+            if rr != 6:
+                ahead = push - 8 if side == WHITE else push + 8
+                if 0 <= ahead <= 63:
+                    eg -= _king_proximity(own_king_sq, ahead) * w
+            if not (bb[OCC_A] & (ONE << uint64(push))):
+                mg, eg = _passer_path(bb, sq, side, push, w, mask, front, mg,
+                                      eg, own_pawn_att, own_attacks,
+                                      enemy_attacks)
     return _taper(mg, eg, phase)
+
+
+@njit(cache=False, fastmath=True)
+def _passer_path(bb, sq, side, push, w, span, to_queen, mg, eg, own_pawn_att,
+                 own_attacks, enemy_attacks):
+    """Reward a passer whose road to promotion is clear or covered.
+
+    Ported from the `if (!getBit(occupancies[both], blockSq))` block of BTC's
+    evaluatePassedPawn, which the port had omitted entirely. It is the largest
+    part of the term for an advanced passer: k reaches 41 and w reaches 17, so
+    it can add nearly 700 to both mg and eg.
+
+    Deliberately not bit-exact with BTC. In the C the local `int r` shadows the
+    black-rook piece enum, so `bitboards[r]` reads black pawns and any enemy
+    pawn behind the passer is mistaken for a rook controlling the file, which
+    deletes the bonus. See docs/BTC_UPSTREAM_ISSUES.md item 4."""
+    them_occ = bb[OCC_B] if side == WHITE else bb[OCC_W]
+    us_occ = bb[OCC_W] if side == WHITE else bb[OCC_B]
+    behind = BLACK_FORWARD_FILE[sq] if side == WHITE else WHITE_FORWARD_FILE[sq]
+    rooks_queens = bb[R] | bb[R + 6] | bb[Q] | bb[Q + 6]
+    backers = behind & rooks_queens
+
+    unsafe = span
+    # an enemy rook or queen behind the pawn controls the whole file, so the
+    # span stays unsafe; otherwise only enemy-held or enemy-covered squares are
+    if not (them_occ & backers):
+        unsafe &= enemy_attacks | them_occ
+
+    block_bit = ONE << uint64(push)
+    if not unsafe:
+        k = 36
+    elif not (unsafe & ~own_pawn_att):
+        k = 30
+    elif not (unsafe & to_queen):
+        k = 17
+    elif not (unsafe & block_bit):
+        k = 7
+    else:
+        k = 0
+
+    if (us_occ & backers) or (own_attacks & block_bit):
+        k += 5
+    return mg + k * w, eg + k * w
 
 
 @njit(cache=False, fastmath=True)
@@ -324,43 +439,112 @@ def _chebyshev(a, b):
 
 
 @njit(cache=False, fastmath=True)
-def _pawn_structure(bb, side, phase):
-    """Doubled, isolated, backward, phalanx and supported pawns."""
-    score = 0
+def _king_proximity(ksq, sq):
+    """Chebyshev distance capped at 5, as BTC's kingProximity. Without the cap
+    the king-race term keeps growing past the range the weights were fitted
+    for."""
+    d = _chebyshev(ksq, sq)
+    return d if d < 5 else 5
+
+
+@njit(cache=False, fastmath=True)
+def _pawn_structure(bb, side):
+    """Per-pawn structure terms, ported from BTC pawnStructureTerms.
+
+    Returns raw (mg, eg). BTC accumulates these over every pawn of both
+    colours and interpolates the net once, so this must not taper."""
+    mg = 0
+    eg = 0
     own = bb[P] if side == WHITE else bb[P + 6]
     enemy = bb[P + 6] if side == WHITE else bb[P]
+    enemy_att = _pawn_attacks_of(bb, 1 - side)[0]
     pawns = own
     while pawns:
         sq = lsb(pawns)
         pawns &= pawns - ONE
-        f = FILE_OF[sq]
-        front = WHITE_FORWARD_FILE[sq] if side == WHITE else BLACK_FORWARD_FILE[sq]
-        support = WHITE_SUPPORT[sq] if side == WHITE else BLACK_SUPPORT[sq]
-        opposed = (enemy & front) != ZERO
+        m, e = _pawn_terms(sq, side, own, enemy, enemy_att)
+        mg += m
+        eg += e
+    return mg, eg
 
-        if own & front:
-            score += _taper(DOUBLED_MG, DOUBLED_EG, phase)
 
-        neighbours = own & ADJACENT_FILES[f]
-        if not neighbours:
-            score += _taper(ISOLATED_MG, ISOLATED_EG, phase)
-            if not opposed:
-                score += _taper(WEAK_UNOPPOSED_MG, WEAK_UNOPPOSED_EG, phase)
+@njit(cache=False, fastmath=True)
+def _pawn_terms(sq, side, own, enemy, enemy_att):
+    """Structure terms for one pawn, from its own side's point of view."""
+    mg = 0
+    eg = 0
+    f = FILE_OF[sq]
+    rr = RELATIVE_RANK[side, sq]
+    up = -8 if side == WHITE else 8
+    front = sq + up
+    behind = sq - up
+
+    forward_file = WHITE_FORWARD_FILE[sq] if side == WHITE         else BLACK_FORWARD_FILE[sq]
+    backward_file = BLACK_FORWARD_FILE[sq] if side == WHITE         else WHITE_FORWARD_FILE[sq]
+    adj = ADJACENT_FILES[f]
+
+    opposed = (enemy & forward_file) != ZERO
+    on_front = 0 <= front <= 63
+    on_behind = 0 <= behind <= 63
+    blocked = on_front and (enemy & (ONE << uint64(front))) != ZERO
+    lever = enemy & PAWN_ATTACKS[side, sq]
+    lever_push = ZERO
+    if on_front:
+        lever_push = enemy & PAWN_ATTACKS[side, front]
+    doubled = on_behind and (own & (ONE << uint64(behind))) != ZERO
+    neighbours = own & adj
+    phalanx = neighbours & RANK_MASK[RANK_OF[sq]]
+    support = ZERO
+    if on_behind:
+        support = neighbours & RANK_MASK[RANK_OF[behind]]
+
+    # an early doubled pawn the enemy has not fixed in place
+    if doubled:
+        them_control = enemy | enemy_att
+        if side == WHITE:
+            fixed = own & (them_control << uint64(8))
         else:
-            phalanx = own & PHALANX[sq]
-            supported = count_bits(own & support)
-            if phalanx or supported:
-                rr = RELATIVE_RANK[side, sq]
-                bonus = CONNECTED_RANK[rr] * (2 if phalanx else 1)
-                if opposed:
-                    bonus = c_div(bonus, 2)
-                score += _taper(bonus + 21 * supported,
-                                c_div(bonus * (rr - 2), 4), phase)
-            elif not (own & (WHITE_PASSED[sq] if side == BLACK
-                             else BLACK_PASSED[sq]) & ADJACENT_FILES[f]):
-                score += _taper(BACKWARD_MG, BACKWARD_EG, phase)
-    return score
+            fixed = own & (them_control >> uint64(8))
+        if not fixed:
+            mg += DOUBLED_EARLY_MG
+            eg += DOUBLED_EARLY_EG
 
+    front_ranks_them = ZERO
+    if on_front:
+        front_ranks_them = FORWARD_RANKS[1 - side, front]
+    is_backward = not (neighbours & front_ranks_them)         and (lever_push or blocked)
+
+    if support or phalanx:
+        v = CONNECTED_RANK[rr] * (2 + (1 if phalanx else 0)
+                                  - (1 if opposed else 0))             + 22 * count_bits(support)
+        mg += v
+        eg += c_div(v * (rr - 2), 4)
+    elif not neighbours:
+        # isolated, unless it is a doubled pawn stuck behind an enemy pawn
+        if opposed and (own & backward_file) and not (enemy & adj):
+            mg += DOUBLED_MG
+            eg += DOUBLED_EG
+        else:
+            unopp = 0 if opposed else 1
+            mg += ISOLATED_MG + WEAK_UNOPPOSED_MG * unopp
+            eg += ISOLATED_EG + WEAK_UNOPPOSED_EG * unopp
+    elif is_backward:
+        not_edge = 1 if 0 < f < 7 else 0
+        unopp = 0 if opposed else 1
+        mg += BACKWARD_MG + WEAK_UNOPPOSED_MG * unopp * not_edge
+        eg += BACKWARD_EG + WEAK_UNOPPOSED_EG * unopp * not_edge
+
+    if not support:
+        dbl = 1 if doubled else 0
+        weak_lever = 1 if count_bits(lever) > 1 else 0
+        mg += DOUBLED_MG * dbl + WEAK_LEVER_MG * weak_lever
+        eg += DOUBLED_EG * dbl + WEAK_LEVER_EG * weak_lever
+
+    if blocked and (rr == 4 or rr == 5):
+        mg -= BLOCKED_PAWN[rr - 4, 0]
+        eg -= BLOCKED_PAWN[rr - 4, 1]
+
+    return mg, eg
 
 @njit(cache=False, fastmath=True)
 def _shelter_storm(bb, side, ksq):
@@ -433,15 +617,51 @@ def _minor_terms(bb, piece_type, sq, side, phase, own_pawn_att, enemy_pawn_att,
     ksq = lsb(bb[K]) if side == WHITE else lsb(bb[K + 6])
     dist = _chebyshev(sq, ksq)
     if piece_type == N:
-        score -= _taper(KING_PROTECTOR_KNIGHT_MG, KING_PROTECTOR_KNIGHT_EG,
-                        phase) * dist
+        # BTC scores the knight as a bonus for closeness, (7 - distance), and
+        # the bishop as a penalty for distance. The two are inconsistent in the
+        # C as well, but the knight form carries a constant 7 * K the port was
+        # dropping: 63 per knight, which only cancels when both sides have the
+        # same number of them.
+        score += _taper(KING_PROTECTOR_KNIGHT_MG, KING_PROTECTOR_KNIGHT_EG,
+                        phase) * (7 - dist)
     else:
         score -= _taper(KING_PROTECTOR_BISHOP_MG, KING_PROTECTOR_BISHOP_EG,
                         phase) * dist
-        if (LONG_DIAGONALS & bit) and count_bits(
-                bishop_attacks(sq, bb[P] | bb[P + 6]) & CENTER) > 1:
-            score += _taper(LONG_DIAGONAL_BISHOP_MG, 0, phase)
+        score += _bishop_pawn_terms(bb, sq, side, phase, own_pawn_att)
     return score
+
+
+@njit(cache=False, fastmath=True)
+def _bishop_pawn_terms(bb, sq, side, phase, own_pawn_att):
+    """Pawns on the bishop's colour, the long diagonal, and enemy pawns it
+    x-rays through the queens. The first and last were missing from the port."""
+    bit = ONE << uint64(sq)
+    occ = bb[OCC_A]
+    own_pawns = bb[P] if side == WHITE else bb[P + 6]
+    enemy_pawns = bb[P + 6] if side == WHITE else bb[P]
+
+    same_colour = DARK_SQUARES if _square_colour(sq) else LIGHT_SQUARES
+    on_colour = count_bits(own_pawns & same_colour)
+    ahead = (occ << uint64(8)) if side == WHITE else (occ >> uint64(8))
+    blocked_centre = count_bits(own_pawns & ahead & CENTER_FILES)
+    unprotected = 0 if (own_pawn_att & bit) else 1
+    f = FILE_OF[sq]
+    edge = f if f < 7 - f else 7 - f
+    score = -_taper(BISHOP_PAWNS_MG[edge], BISHOP_PAWNS_EG[edge], phase)         * on_colour * (unprotected + blocked_centre)
+
+    # long diagonal: BTC clears only its own pawns from the blockers
+    through = bishop_attacks(sq, occ ^ own_pawns)
+    if count_bits(through & CENTER) >= 2:
+        score += _taper(LONG_DIAGONAL_BISHOP_MG, 0, phase)
+
+    xray = bishop_attacks(sq, occ ^ (bb[Q] | bb[Q + 6]))
+    score -= _taper(BISHOP_XRAY_MG, BISHOP_XRAY_EG, phase)         * count_bits(xray & enemy_pawns)
+    return score
+
+
+@njit(cache=False, fastmath=True)
+def _square_colour(sq):
+    return (sq & 1) ^ ((sq >> 3) & 1)
 
 
 @njit(cache=False, fastmath=True)
@@ -450,6 +670,11 @@ def _rook_file_term(bb, sq, side, phase):
     enemy_pawns = bb[P + 6] if side == WHITE else bb[P]
     file_mask = FILE_MASK[FILE_OF[sq]]
     if own_pawns & file_mask:
+        # our own pawn on the file: a penalty if any of them is blocked
+        occ = bb[OCC_A]
+        ahead = (occ << uint64(8)) if side == WHITE else (occ >> uint64(8))
+        if own_pawns & file_mask & ahead:
+            return -_taper(ROOK_CLOSED_MG, ROOK_CLOSED_EG, phase)
         return 0
     if enemy_pawns & file_mask:
         return _taper(ROOK_OPEN_MG[0], ROOK_OPEN_EG[0], phase)
@@ -458,7 +683,7 @@ def _rook_file_term(bb, sq, side, phase):
 
 @njit(cache=False, fastmath=True)
 def _side_score(bb, side, phase, own_pawn_att, enemy_pawn_att, enemy_pawn_span,
-                area, blockers):
+                area, blockers, own_attacks, enemy_attacks):
     """All per-piece terms for one side, from that side's point of view.
     Returns (score, king ring hits, attack units, distinct attackers); these
     are returned rather than written into arrays so the hot path allocates
@@ -473,6 +698,7 @@ def _side_score(bb, side, phase, own_pawn_att, enemy_pawn_att, enemy_pawn_span,
         else WHITE_KING_ZONE[enemy_ksq]
     own_ksq = lsb(bb[K]) if side == WHITE else lsb(bb[K + 6])
     occ = bb[OCC_A]
+    stage = game_stage(phase)
 
     for pt in range(P, K + 1):
         pieces = bb[base + pt]
@@ -480,18 +706,22 @@ def _side_score(bb, side, phase, own_pawn_att, enemy_pawn_att, enemy_pawn_span,
             sq = lsb(pieces)
             pieces &= pieces - ONE
             pst_sq = sq if side == WHITE else MIRROR[sq]
-            score += _taper(MATERIAL_MG[pt], MATERIAL_EG[pt], phase)
-            score += _taper(PIECE_TABLES[0, pt, pst_sq],
-                            PIECE_TABLES[1, pt, pst_sq], phase)
+            score += _stage_value(MATERIAL_MG[pt], MATERIAL_EG[pt], phase,
+                                  stage)
+            score += _stage_value(PIECE_TABLES[0, pt, pst_sq],
+                                  PIECE_TABLES[1, pt, pst_sq], phase, stage)
 
             if pt == P:
-                score += _passed_pawn(bb, sq, side, phase, enemy_ksq, own_ksq)
+                score += _passed_pawn(bb, sq, side, phase, enemy_ksq, own_ksq,
+                                      own_pawn_att, own_attacks,
+                                      enemy_attacks)
                 continue
             if pt == K:
                 continue
 
             mob = _piece_mobility(bb, pt, sq, side, area, blockers)
-            score += _taper(MOBILITY_MG[pt, mob], MOBILITY_EG[pt, mob], phase)
+            score += _stage_value(MOBILITY_MG[pt, mob], MOBILITY_EG[pt, mob],
+                                  phase, stage)
 
             if pt == N or pt == B:
                 score += _minor_terms(bb, pt, sq, side, phase, own_pawn_att,
@@ -513,7 +743,6 @@ def _side_score(bb, side, phase, own_pawn_att, enemy_pawn_att, enemy_pawn_span,
                 attack_units += KING_ATTACK_WEIGHTS[pt] * hits
                 king_zone_hits += hits
 
-    score += _pawn_structure(bb, side, phase)
     return score, king_zone_hits, attack_units, attackers
 
 
@@ -684,33 +913,167 @@ def _threats(bb, us, phase, our_knight, our_bishop, our_rook, our_king,
 
 
 @njit(cache=False, fastmath=True)
-def _king_safety(bb, side, phase, attack_units, attackers, king_ring_attacks,
-                 enemy_attacks, our_attacks):
-    """Sum-of-contributions king danger, converted to a score."""
+def _king_safety(bb, side, phase, own_all, own_double, own_king_att,
+                 own_queen_att, own_knight_att, own_pawn_double, enemy_all,
+                 enemy_double, enemy_rook_att, enemy_queen_att,
+                 enemy_bishop_att, enemy_knight_att, enemy_pawn_att,
+                 shelter_mg):
+    """King danger for `side`, ported from BTC getKingDanger.
+
+    Returns the penalty to add to `side`'s score (so, negative). Sums small
+    contributions - attacker weight, weak king-ring squares, safe and unsafe
+    checks, slider blockers, king-flank pressure, and credits for no enemy
+    queen, a defending knight, shelter and flank defence - then squares the
+    total. The port previously had only the attacker, weak-ring, flank and
+    no-queen terms, and its flank term was linear rather than quadratic, so it
+    under-read an attack badly: a knight near the enemy king with queens on
+    the board scored about 900 low against BTC."""
+    them = 1 - side
     ksq = lsb(bb[K]) if side == WHITE else lsb(bb[K + 6])
-    enemy_queen = bb[Q + 6] if side == WHITE else bb[Q]
+    own_queen_bb = bb[Q] if side == WHITE else bb[Q + 6]
+    their_occ = bb[OCC_B] if side == WHITE else bb[OCC_W]
+    enemy_queens = bb[Q + 6] if side == WHITE else bb[Q]
 
-    danger = KD_INIT
-    danger += attack_units
-    danger += KD_KING_ATTACKS * king_ring_attacks
-    weak_ring = count_bits(enemy_attacks & (WHITE_KING_ZONE[ksq]
-                                            if side == WHITE
-                                            else BLACK_KING_ZONE[ksq])
-                           & ~our_attacks)
-    danger += KD_WEAK_RING * weak_ring
-    flank = KING_FLANK[FILE_OF[ksq]]
-    danger += KD_FLANK_ATTACK * count_bits(enemy_attacks & flank)
-    if not enemy_queen:
+    # squares by our king the enemy attacks and we defend at most once
+    weak = enemy_all & ~own_double & (~own_all | own_king_att | own_queen_att)
+    safe = ~their_occ & (~own_all | (weak & enemy_double))
+
+    # slider rays from our king, with our own queen transparent
+    occ = bb[OCC_A] ^ own_queen_bb
+    rook_rays = rook_attacks(ksq, occ)
+    bishop_rays = bishop_attacks(ksq, occ)
+
+    danger, unsafe = _kd_checks(ksq, rook_rays, bishop_rays, safe,
+                                enemy_rook_att, enemy_queen_att,
+                                enemy_bishop_att, enemy_knight_att,
+                                own_queen_att)
+
+    kf = FILE_OF[ksq]
+    if kf < 1:
+        kf = 1
+    elif kf > 6:
+        kf = 6
+    kr = 7 - RANK_OF[ksq]
+    if kr < 1:
+        kr = 1
+    elif kr > 6:
+        kr = 6
+    ring_sq = (7 - kr) * 8 + kf
+    king_ring = (KING_ATTACKS[ring_sq] | (ONE << uint64(ring_sq)))         & ~own_pawn_double
+
+    flank = KING_FLANK[FILE_OF[ksq]] & CAMP[side]
+    flank_atk = enemy_all & flank
+    flank_attack = count_bits(flank_atk) + count_bits(flank_atk & enemy_double)
+    flank_defense = count_bits(own_all & flank)
+
+    count, weight, adj_hits = _kd_attackers(bb, them, king_ring,
+                                            KING_ATTACKS[ksq], bb[OCC_A])
+    count += count_bits(king_ring & enemy_pawn_att)
+
+    danger += count * weight
+    danger += KD_WEAK_RING * count_bits(king_ring & weak)
+    danger += KD_UNSAFE_CHECK * count_bits(unsafe)
+    danger += KD_BLOCKER * _kd_blockers(bb, side, ksq)
+    danger += KD_KING_ATTACKS * adj_hits
+    danger += c_div(KD_FLANK_ATTACK * flank_attack * flank_attack, 8)
+    if not enemy_queens:
         danger -= KD_NO_QUEEN
+    if own_knight_att & own_king_att:
+        danger -= KD_KNIGHT_DEFENSE
+    danger -= c_div(KD_SHELTER * shelter_mg, 8)
+    danger -= KD_FLANK_DEFENSE * flank_defense
+    danger += KD_INIT
 
-    if attackers < 2:
-        danger = c_div(danger, 2)
-    if danger <= 0:
-        return 0
-    mg = -c_div(danger * danger, 4096)
-    eg = -c_div(danger, 16)
-    return _taper(mg, eg, phase)
+    mg = 0
+    eg = 0
+    if danger > 100:
+        mg = c_div(danger * danger, 4096)
+        eg = c_div(danger, 16)
+    if not ((bb[P] | bb[P + 6]) & KING_FLANK[FILE_OF[ksq]]):
+        mg += PAWNLESS_FLANK_MG
+        eg += PAWNLESS_FLANK_EG
+    return -_taper(mg, eg, phase)
 
+
+@njit(cache=False, fastmath=True)
+def _kd_checks(ksq, rook_rays, bishop_rays, safe, enemy_rook_att,
+               enemy_queen_att, enemy_bishop_att, enemy_knight_att,
+               own_queen_att):
+    """Safe-check bonuses, and the unsafe checks that remain. Each attacker is
+    only credited for squares a more valuable attacker cannot already use."""
+    danger = 0
+    unsafe = ZERO
+
+    rook_checks = rook_rays & enemy_rook_att & safe
+    if rook_checks:
+        danger += SAFE_CHECK[R, 1 if count_bits(rook_checks) > 1 else 0]
+    else:
+        unsafe |= rook_rays & enemy_rook_att
+
+    queen_checks = (rook_rays | bishop_rays) & enemy_queen_att & safe         & ~(own_queen_att | rook_checks)
+    if queen_checks:
+        danger += SAFE_CHECK[Q, 1 if count_bits(queen_checks) > 1 else 0]
+
+    bishop_checks = bishop_rays & enemy_bishop_att & safe & ~queen_checks
+    if bishop_checks:
+        danger += SAFE_CHECK[B, 1 if count_bits(bishop_checks) > 1 else 0]
+    else:
+        unsafe |= bishop_rays & enemy_bishop_att
+
+    knight_checks = KNIGHT_ATTACKS[ksq] & enemy_knight_att
+    if knight_checks & safe:
+        n = count_bits(knight_checks & safe)
+        danger += SAFE_CHECK[N, 1 if n > 1 else 0]
+    else:
+        unsafe |= knight_checks
+    return danger, unsafe
+
+
+@njit(cache=False, fastmath=True)
+def _kd_attackers(bb, them, king_ring, king_adj, occ):
+    """Enemy pieces whose attacks reach the king ring: how many, their summed
+    weight, and how many squares directly beside the king they hit."""
+    base = 0 if them == WHITE else 6
+    count = 0
+    weight = 0
+    adj_hits = 0
+    for pt in range(N, K):
+        pieces = bb[base + pt]
+        while pieces:
+            sq = lsb(pieces)
+            pieces &= pieces - ONE
+            if pt == N:
+                att = KNIGHT_ATTACKS[sq]
+            elif pt == B:
+                att = bishop_attacks(sq, occ)
+            elif pt == R:
+                att = rook_attacks(sq, occ)
+            else:
+                att = queen_attacks(sq, occ)
+            if att & king_ring:
+                count += 1
+                weight += KING_ATTACK_WEIGHTS[pt]
+                adj_hits += count_bits(att & king_adj)
+    return count, weight, adj_hits
+
+
+@njit(cache=False, fastmath=True)
+def _kd_blockers(bb, side, ksq):
+    """Pieces of either colour that alone block an enemy slider from the king.
+    Snipers are found with the board cleared, then a single occupied square
+    between king and sniper is a blocker."""
+    enemy_rq = (bb[R + 6] | bb[Q + 6]) if side == WHITE else (bb[R] | bb[Q])
+    enemy_bq = (bb[B + 6] | bb[Q + 6]) if side == WHITE else (bb[B] | bb[Q])
+    snipers = (rook_attacks(ksq, ZERO) & enemy_rq)         | (bishop_attacks(ksq, ZERO) & enemy_bq)
+    sniper_occ = bb[OCC_A] ^ snipers
+    blockers = ZERO
+    while snipers:
+        sq = lsb(snipers)
+        snipers &= snipers - ONE
+        between = BETWEEN[ksq, sq] & sniper_occ
+        if between and not (between & (between - ONE)):
+            blockers |= between
+    return count_bits(blockers)
 
 # The twelve imbalance piece counts are each below 16, so they pack into one
 # integer as 4-bit fields. This keeps the term allocation-free on the hot path.
@@ -817,56 +1180,89 @@ def evaluate(bb, st):
 
     phase = game_phase(bb)
 
-    white_pawn_att, white_pawn_double = _pawn_attacks_of(bb, WHITE)
-    black_pawn_att, black_pawn_double = _pawn_attacks_of(bb, BLACK)
-    white_span = _pawn_attack_span(bb, WHITE)
-    black_span = _pawn_attack_span(bb, BLACK)
-    white_blockers = _king_blockers(bb, WHITE)
-    black_blockers = _king_blockers(bb, BLACK)
-    white_area = _mobility_area(bb, WHITE, black_pawn_att, white_blockers)
-    black_area = _mobility_area(bb, BLACK, white_pawn_att, black_blockers)
+    # int64() rather than the bare WHITE/BLACK constants: numba specialises
+    # on integer literals, so passing the constants compiled every function
+    # reached from here twice, once per colour, doubling the eval's share of
+    # the init budget. See docs/PROGRESS.md.
+    side_w = int64(WHITE)
+    side_b = int64(BLACK)
+
+    white_pawn_att, white_pawn_double = _pawn_attacks_of(bb, side_w)
+    black_pawn_att, black_pawn_double = _pawn_attacks_of(bb, side_b)
+    white_span = _pawn_attack_span(bb, side_w)
+    black_span = _pawn_attack_span(bb, side_b)
+    white_blockers = _king_blockers(bb, side_w)
+    black_blockers = _king_blockers(bb, side_b)
+    white_area = _mobility_area(bb, side_w, black_pawn_att, white_blockers)
+    black_area = _mobility_area(bb, side_b, white_pawn_att, black_blockers)
+
+    # accumulate first: the passed-pawn path bonus in _side_score needs both
+    # sides' full attack sets, and _accumulate depends only on the board
+    (w_knight, w_bishop, w_rook, w_queen, w_king, white_attacks,
+     w_double) = _accumulate(bb, side_w)
+    (b_knight, b_bishop, b_rook, b_queen, b_king, black_attacks,
+     b_double) = _accumulate(bb, side_b)
 
     white_score, w_hits, w_units, w_attackers = _side_score(
-        bb, WHITE, phase, white_pawn_att, black_pawn_att, black_span,
-        white_area, white_blockers)
+        bb, side_w, phase, white_pawn_att, black_pawn_att, black_span,
+        white_area, white_blockers, white_attacks, black_attacks)
     black_score, b_hits, b_units, b_attackers = _side_score(
-        bb, BLACK, phase, black_pawn_att, white_pawn_att, white_span,
-        black_area, black_blockers)
+        bb, side_b, phase, black_pawn_att, white_pawn_att, white_span,
+        black_area, black_blockers, black_attacks, white_attacks)
 
-    (w_knight, w_bishop, w_rook, w_queen, w_king, white_attacks,
-     w_double) = _accumulate(bb, WHITE)
-    (b_knight, b_bishop, b_rook, b_queen, b_king, black_attacks,
-     b_double) = _accumulate(bb, BLACK)
+    # shelter first: its mg total feeds back into king danger, as in BTC
+    white_shelter = _shelter_storm(bb, side_w, lsb(bb[K]))
+    black_shelter = _shelter_storm(bb, side_b, lsb(bb[K + 6]))
+    white_score += white_shelter
+    black_score += black_shelter
 
-    # danger to white's king comes from black's attack accumulation
-    white_score += _king_safety(bb, WHITE, phase, b_units, b_attackers,
-                                b_hits, black_attacks, white_attacks)
-    black_score += _king_safety(bb, BLACK, phase, w_units, w_attackers,
-                                w_hits, white_attacks, black_attacks)
-
-    white_score += _shelter_storm(bb, WHITE, lsb(bb[K]))
-    black_score += _shelter_storm(bb, BLACK, lsb(bb[K + 6]))
+    white_score += _king_safety(
+        bb, side_w, phase, white_attacks, w_double, w_king, w_queen, w_knight,
+        white_pawn_double, black_attacks, b_double, b_rook, b_queen, b_bishop,
+        b_knight, black_pawn_att, white_shelter)
+    black_score += _king_safety(
+        bb, side_b, phase, black_attacks, b_double, b_king, b_queen, b_knight,
+        black_pawn_double, white_attacks, w_double, w_rook, w_queen, w_bishop,
+        w_knight, white_pawn_att, black_shelter)
 
     if USE_THREATS:
-        white_score += _threats(bb, WHITE, phase, w_knight, w_bishop, w_rook,
+        white_score += _threats(bb, side_w, phase, w_knight, w_bishop, w_rook,
                                 w_king, white_attacks, w_double,
                                 black_attacks, black_pawn_att, b_double,
                                 b_queen, white_area)
-        black_score += _threats(bb, BLACK, phase, b_knight, b_bishop, b_rook,
+        black_score += _threats(bb, side_b, phase, b_knight, b_bishop, b_rook,
                                 b_king, black_attacks, b_double,
                                 white_attacks, white_pawn_att, w_double,
                                 w_queen, black_area)
 
     score = white_score - black_score
+    # net across both colours, then interpolate once: BTC's
+    # computePawnStructure accumulates netMg/netEg over every pawn of both
+    # sides and calls interpolate a single time
+    w_ps_mg, w_ps_eg = _pawn_structure(bb, side_w)
+    b_ps_mg, b_ps_eg = _pawn_structure(bb, side_b)
+    score += _taper(w_ps_mg - b_ps_mg, w_ps_eg - b_ps_eg, phase)
     score += _imbalance(bb, phase)
 
     if USE_SPACE:
         # middlegame term: taper it away toward the endgame
-        space = _space(bb, WHITE, phase, black_pawn_att, black_attacks,
+        space = _space(bb, side_w, phase, black_pawn_att, black_attacks,
                        white_pawn_double, black_pawn_double) \
-            - _space(bb, BLACK, phase, white_pawn_att, white_attacks,
+            - _space(bb, side_b, phase, white_pawn_att, white_attacks,
                      white_pawn_double, black_pawn_double)
         score += _taper(space, 0, phase)
-    if st[SIDE] == WHITE:
-        return score + TEMPO
-    return -score + TEMPO
+
+    # tempo joins the white-relative total before scaling, as in BTC, where it
+    # is added at the top of evaluate() and the scale factor applies to it too
+    score += TEMPO if st[SIDE] == WHITE else -TEMPO
+
+    if USE_SCALE:
+        sf = endgame_scale(bb, st, score)
+        if sf != 64:
+            eg_weight = OPENING_PHASE - phase
+            if eg_weight < 0:
+                eg_weight = 0
+            num = OPENING_PHASE * 64 - eg_weight * (64 - sf)
+            score = c_div(score * num, OPENING_PHASE * 64)
+
+    return score if st[SIDE] == WHITE else -score
