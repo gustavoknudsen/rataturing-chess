@@ -1,11 +1,39 @@
-﻿.venv/
+# Local credentials - never commit
+.env
+
+# Virtualenvs
+.venv/
+.venv_nnue/
+
+# Python
 __pycache__/
 *.pyc
-submission.zip
 
-baseline_p2/
-openings.json
+# Build output. The submission is rebuilt from source by tools/package.py.
+submission*.zip
 
-champion/
+# Shipped data files. They live beside the engine because btc_nnue.find_net()
+# and btc_book._path() both resolve relative to their own module, and the
+# submission zip is flat. Too large for git, and regenerable.
+src/net.npz
+src/*.bin
 
-HANDOFF.md
+# Working data: generated opening sets, caches.
+data/
+
+# Old champion builds, superseded submissions and backups. Kept on disk for
+# diffing against past versions, never in the repo.
+archive/
+
+# Internal working notes: session handoffs, plans, per-experiment logs.
+# The design and rules documents in docs/ are tracked; these are not.
+docs/research/
+
+# Training notebooks. Only the notebook that produced the shipped network is
+# tracked; the rest are width and data experiments that were not adopted.
+training/notebooks/*
+!training/notebooks/kaggle_nnue.ipynb
+
+# Compiled helpers for the training data pipeline.
+tools/*.exe
+tools/*.obj
