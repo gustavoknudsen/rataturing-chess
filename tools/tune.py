@@ -34,8 +34,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 #   - the reduction and pruning constants most exposed to our shallower tree
 #
 # LMR_HIST_DIV is here because BTC's 4096 was fitted against a continuation
-# history term that is structurally always zero in the C (BTC_UPSTREAM_ISSUES
-# item 6); ours reads the populated slots, so the divisor is very likely wrong.
+# history term that is structurally always zero in the C; ours reads the populated slots, so the divisor is very likely wrong.
 CANDIDATES = [
     ("BTC_NULL_BASE_R", "2"),
     ("BTC_NULL_DEPTH_DIV", "6"),

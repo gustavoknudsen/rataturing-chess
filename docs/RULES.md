@@ -1,6 +1,6 @@
 # AI Chessathon - Competition Rules & Constraints (ground truth)
 
-Compiled 2026-09-07 from:
+Kept as the record of the constraints the engine was designed against. Section 5 was re-verified against the published documentation on 2026-09-11; the rest is as gathered on 2026-09-07, from:
 
 - **[L]** https://aichessathon.com/ (landing + FAQ)
 - **[T]** https://aichessathon.com/terms
@@ -9,7 +9,7 @@ Compiled 2026-09-07 from:
 - **[R]** https://aichessathon.com/docs/rules.md (canonical, per starter repo)
 - **[S]** github.com/advitrocks9/aichessathon-starter - `AGENTS.md`, `harness/rules.py`, `harness/referee.py`, `harness/runner.py` (the harness mirrors the platform protocol)
 
-`/daily` was not fetched (may block automated access); the Daily Five is a human puzzle side-event and does not affect agent engineering. Note its fair-play rule: it must be solved alone, **without an engine** [T] - never point BTC at it.
+`/daily` was not fetched (may block automated access); the Daily Five is a human puzzle side-event and does not affect agent engineering. Note its fair-play rule: it must be solved alone, **without an engine** [T].
 
 The site warns that the docs change; re-fetch [AC] and [R] before the final upload.
 
@@ -30,17 +30,16 @@ def get_move(fen: str, time_left_ms: int) -> str: ...
 
 ## 2. Environment [D][AC][S]
 
-- Python **3.12**. Preinstalled, fixed versions, nothing else installs (`requirements.txt` ignored):
-- torch 2.13.0+cpu
-- numpy 2.5.2
-- python-chess 1.11.2
-- onnxruntime 1.29.0
-- numba 0.67.0
+- Python **3.12**. Preinstalled, fixed versions; nothing else installs, and a shipped `requirements.txt` is ignored:
+  - torch 2.13.0+cpu
+  - numpy 2.5.2
+  - python-chess 1.11.2
+  - onnxruntime 1.29.0
+  - numba 0.67.0
 - CPU: **one core** of AMD EPYC 9V74 @ 2.60 GHz, exclusive during our turn. Max 128 processes, but more threads/processes than one core lose time [D][S].
 - Memory: **2 GB**. OOM = loss of that game.
 - **No network. No GPU.**
-- Filesystem: **read-only root**; `/tmp` = **256 MB** scratch, **wiped after each game**; `HOME` and all cache paths point to `/tmp`. Consequence: **numba `cache=True` never hits**
-- the engine recompiles from scratch every game, inside the init budget [D][S].
+- Filesystem: **read-only root**; `/tmp` = **256 MB** scratch, **wiped after each game**; `HOME` and all cache paths point to `/tmp`. Consequence: **numba `cache=True` never hits**, so the engine recompiles from scratch every game, inside the init budget [D][S].
 - Our zip is first on `sys.path`: never name a file after a stdlib/installed module (`chess.py`, `types.py`, `random.py`...) [S].
 
 ## 3. Time control & failure modes [D][AC][S + referee.py]
@@ -79,7 +78,7 @@ Banned:
 - Network calls, subprocess to external binaries, reading outside agent dir + `/tmp` [S].
 
 Allowed:
-- **Our own pre-existing engine**: "Your moves come from code you wrote" [R] - BTC is Gustavo's own code, so porting it is explicitly within the rules. "A model is not required, a classical search is a full entry" [L].
+- **Our own pre-existing engine**: "Your moves come from code you wrote" [R] - BTC is the author's own engine, so building on it is within the rules. "A model is not required, a classical search is a full entry" [L].
 - Model weight files `.onnx`, `.safetensors`, `.pt` (self-trained only) [D].
 - **A table you ship and read during a game may answer the opening or the endgame.** Verbatim from the documentation. "The opening is a position whose move number is 20 or lower." The bound applies to the opening; the endgame allowance is separate and is not move-numbered.
 
@@ -92,11 +91,11 @@ Allowed:
 
 ## 6. Tournament format & dates [D][R][L]
 
-- **Qualifier ladder**: 4-11 Sep 2026, hourly rated rounds 08:00-22:00. Open worldwide. **(Live now - every day without an upload is rating left on the table.)**
+- **Qualifier ladder**: 4-11 Sep 2026, hourly rated rounds 08:00-22:00. Open worldwide.
 - **Submission lock: 11 Sep 11:00.**
 - **Qualification Swiss**: 13 rounds, 11 Sep afternoon, locked builds.
 - **Final**: 12 Sep, Encode Club, London. 50 seats; at least one UK university student per team required to enter the final Swiss; only UK members occupy London seats; max one seat per UK member / two per team [D][T].
-- Tie-breaks: points, Buchholz, head-to-head, **earlier submission** [D] - a reason not to wait until 10:59 on the 11th.
+- Tie-breaks: points, Buchholz, head-to-head, **earlier submission** [D].
 - Teams: 1-3 people, one team per person [R]. Prizes: GBP 1,000 / 500 / 250 [L].
 - Judging: agent design, match performance (Elo), stable execution [L].
 

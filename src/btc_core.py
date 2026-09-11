@@ -564,7 +564,7 @@ def _gen_castling(bb, st, ml, cnt, side):
     """Castling moves. The attack tests take int64() squares rather than the
     square constants: numba specialises on integer literals, and the literal
     forms compiled six extra copies of is_under_attack and of the magic
-    attack helpers it calls. See docs/PROGRESS.md."""
+    attack helpers it calls."""
     castle = st[CASTLE]
     occ_all = bb[OCC_A]
     if side == WHITE:
@@ -703,7 +703,7 @@ def _restore(bb, st, undo_bb, undo_st, ply):
 def make_move(bb, st, undo_bb, undo_st, ply, mv):
     """Copy-make: snapshot to undo[ply], apply, verify own king is safe.
     Returns 1 with the move made, or restores and returns 0 if illegal.
-    Deviations from the C engine (see docs/ENGINE_AUDIT.md): no eval
+    Deviations from the C engine: no eval
     accumulator rebuild; en passant square recorded only when an enemy pawn
     can pseudo-legally capture it."""
     for i in range(16):

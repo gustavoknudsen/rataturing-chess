@@ -4,24 +4,24 @@
 
 Kept because it records the coverage measurements and the test vectors, which are the evidence that the book answers the positions it was built for.
 
-Written for whoever is wiring the book into `agent.py`. The interface below is **stable**; only the main book's size changes as labelling proceeds.
+Describes the interface as built.
 
 ## What you get
 
 | file | status | entries | size |
 |---|---|---|---|
-| `rataturing_hedge.bin` | **FINAL, verified** | 319,062 | 5.10 MB |
-| `rataturing.bin` | in progress, same format | bounded by labelling time, not size | <= 2.4 MB |
+| `rataturing_hedge.bin` | shipped | 552,078 | 8.42 MB |
+| `rataturing.bin` | shipped | 475,719 | 7.26 MB |
 
 The hedge is built from three merged trees: an exhaustive walk of Cerebellum's opening subtree, a deeper walk restricted to plausible moves, and a book-vote expansion carrying 51 forced lines for openings absent from the ladder pool. It answers 32/32 mainstream openings and 51/51 of those forced lines, and covers 139 of the 308 known curated starts (45%). Coverage of an *unknown* curated start falls off sharply with its move number -- about 50% at move 6-7, 40% at move 8, near zero from move 9 -- so treat it as partial insurance, not a guarantee.
 
 Sizing note: the submission has ~24.5 MB spare, which is room for ~1.5M Polyglot entries. Even the full 150k-position expansion is 2.4 MB. **Size never binds**  - the entry count is set by how many positions we can label, so do not treat any figure here as a cap or build anything that assumes one.
 
-Both are standard Polyglot: 16-byte big-endian records sorted by key, read by `chess.polyglot` from the base image. **Nothing about your code changes when the main book lands**  -  same format, same probe, only more entries. Do not hardcode entry counts or file sizes anywhere.
+Both are standard Polyglot: 16-byte big-endian records sorted by key, read by `chess.polyglot` from the base image. Both books are final  -  same format, same probe, only more entries. Do not hardcode entry counts or file sizes anywhere.
 
 Priority: probe `rataturing.bin` first, `rataturing_hedge.bin` only on a miss. The names match `BOOK_FILES` in `btc_book.py`; the hedge silently does not load if they drift, so assert that **two** readers opened, not merely that `probe()` returns something.
 
-Test vectors below were re-checked against the rebuilt 319k-entry hedge and are unchanged.
+Entry counts above match what package.py reports when it loads the shipped books.
 
 ## The probe
 
@@ -67,13 +67,13 @@ Use `find`, not `find_all`  -  there is exactly one move per position by design.
 
 `open_reader` mmaps, so loading costs **18 ms** and no meaningful memory. Do it at import, inside the 90 s init budget, never per move.
 
-## Five things that will bite you
+## Five things that caused problems
 
 **1. The repetition-history bug.** `agent.py` calls `TRACKER.update(fen)` inside `_search_move`. If a book move returns before that runs, `GameTracker` sees no `push_our_move`, finds `expected_bb is None` next call, and **resets the repetition key history** (`btc_game.py:36-39`). Whatever records positions must move *above* the book probe, and a book move must still call `TRACKER.push_our_move`. There is no uci->packed helper in `btc_core`; generate legal moves and match on `core.move_to_uci`.
 
 **2. The move-20 guard is a rules requirement, not an optimisation.** Never remove it, never raise it, never add a fallback that widens the book's reach. Keep the comment  -  a judge reads this file.
 
-**3. Do not reimplement Zobrist hashing in `btc_core`/numba.** A full probe is **90.5 ?s**, of which 41.5 ?s is the hash  -  0.0026% of a 3.5 s move. A subtle mismatch with `chess.polyglot`'s hash silently causes misses or wrong-position hits. The saving rounds to zero; the risk does not. For the same reason, don't bother caching probes: at most ~20 per game, under 2 ms total.
+**3. Do not reimplement Zobrist hashing in `btc_core`/numba.** A full probe is **90.5 us**, of which 41.5 us is the hash  -  0.0026% of a 3.5 s move. A subtle mismatch with `chess.polyglot`'s hash silently causes misses or wrong-position hits. The saving rounds to zero; the risk does not. For the same reason, don't bother caching probes: at most ~20 per game, under 2 ms total.
 
 **4. A missing or corrupt book must degrade, not crash.** Test with the files deleted and with a few bytes truncated off one. Both must fall through to search silently. A crash is a loss.
 

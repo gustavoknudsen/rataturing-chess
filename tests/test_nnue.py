@@ -150,7 +150,8 @@ def check_mirror(net):
 
 def main():
     net_path = sys.argv[1] if len(sys.argv) > 1 \
-        else "D:/chess_nnue/net256/net.npz"
+        else _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                             _os.pardir, "src", "net.npz")
     data_dir = sys.argv[2] if len(sys.argv) > 2 else "D:/chess_nnue/data50m"
     n = int(sys.argv[3]) if len(sys.argv) > 3 else 2000
 

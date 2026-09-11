@@ -33,7 +33,12 @@ from urllib.parse import unquote
 
 # Requires httpx (async HTTP), which is not part of the engine's runtime
 # dependencies: pip install httpx. Only this scraping stage needs it.
-import httpx
+try:
+    import httpx
+except ImportError:
+    raise SystemExit(
+        "this stage needs httpx, which the engine itself does not: "
+        "pip install httpx")
 
 BASE = "https://aichessathon.com"
 OUT = Path("out")

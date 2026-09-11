@@ -45,7 +45,6 @@ SHIP = [
 # net.npz is the self-trained network. Shipping it is what turns the NNUE
 # evaluation on, because btc_eval only enables it when the file is actually
 # there - so a build with no net.npz is exactly the hand-crafted engine.
-# No opening book ships. The .bin files in the working tree are
 # Both books ship. rataturing.bin has no entry for the standard start - it
 # is built outward from the tournament's CURATED opening positions, not from
 # move 1 - which is why an earlier note here wrongly called it zobrist

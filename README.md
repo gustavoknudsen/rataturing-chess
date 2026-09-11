@@ -29,7 +29,7 @@ Most of the engine's design follows from these.
 
 **Allowed:** your own prior work, self-trained networks, unrestricted training data, and a shipped table that answers the opening or the endgame, where the opening is a position whose move number is 20 or lower.
 
-Rataturing is built on BetterThanCris, a C++ engine by the same author, which the rules permit: "Your moves come from code you wrote." The network is trained from scratch. The opening book is gated at move 20 in `src/btc_book.py`, checked against the referee's own FEN. Full summary in [`docs/RULES.md`](docs/RULES.md).
+Rataturing is built on BetterThanCris, a C engine by the same author, since extended with C++ files and utilities, which the rules permit: "Your moves come from code you wrote." The network is trained from scratch. The opening book is gated at move 20 in `src/btc_book.py`, checked against the referee's own FEN. Full summary in [`docs/RULES.md`](docs/RULES.md).
 
 ## Repository structure
 
@@ -42,7 +42,7 @@ Rataturing is built on BetterThanCris, a C++ engine by the same author, which th
     book/         opening book pipeline: scrape, expand, label, merge, build
     docs/         competition rules and design decisions
 
-The network (`src/net.npz`) and the books (`src/*.bin`) are not in the repository. They are large, and they sit beside the engine because `btc_nnue.find_net()` and `btc_book._path()` both resolve relative to their own module.
+The network (`src/net.npz`, 24 MB) and the two opening books (`src/*.bin`, 16 MB) are included, so a clone runs the engine that actually competed. They sit beside the engine rather than in a data directory because `btc_nnue.find_net()` and `btc_book._path()` both resolve relative to their own module, and the submission zip is flat.
 
 ## Getting started
 
@@ -74,11 +74,15 @@ Reproducing the training or book pipelines needs `pip install -r requirements-de
 
 ## Performance
 
-About 627,000 nodes per second at depth 11 on the development machine, idle.
+About 650,000 nodes per second at depth 11 on the development machine, idle:
 
-Two caveats before comparing that with anything. The match machine is a single EPYC 9V74 core and is slower, so expect roughly 1.5x to 2x less. And the same benchmark on the same build varies by 1.6x between an idle machine and a loaded one. Node counts at a fixed depth are deterministic and do transfer; nodes per second, init time and reachable depth do not.
+    python tools/searchbench.py 11 3
 
-The network is not the bottleneck. Disabling it drops throughput to about 381,000 nodes per second, because the NNUE accumulator is updated incrementally through make and unmake, while the hand-crafted evaluation recomputes pawn structure, king safety and mobility at every leaf.
+Treat that as a reading of this machine on that day, not a property of the engine. The match hardware is a single EPYC 9V74 core and is slower. More importantly, the same command on the same build varies by well over a third with machine load: repeated runs here have given anywhere from 490,000 to 650,000. Only compare figures measured back to back under the same conditions.
+
+Node counts at a fixed depth do not have that problem. They are deterministic, reproduce exactly across runs and machines, and are what the screening step in the development method below actually uses.
+
+The network is not the bottleneck. Disabling it *lowers* throughput, to about 437,000 nodes per second, because the NNUE accumulator is updated incrementally through make and unmake while the hand-crafted evaluation recomputes pawn structure, king safety and mobility at every leaf. The size of that gap moves with load; its direction has held in every measurement.
 
 ## Development method
 

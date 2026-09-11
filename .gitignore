@@ -12,11 +12,11 @@ __pycache__/
 # Build output. The submission is rebuilt from source by tools/package.py.
 submission*.zip
 
-# Shipped data files. They live beside the engine because btc_nnue.find_net()
-# and btc_book._path() both resolve relative to their own module, and the
-# submission zip is flat. Too large for git, and regenerable.
-src/net.npz
-src/*.bin
+# The network and the books ARE tracked. They are 40 MB together, well inside
+# GitHub's limits, and without them a clone silently runs the weaker
+# hand-crafted evaluation with no book. They live beside the engine because
+# btc_nnue.find_net() and btc_book._path() both resolve relative to their own
+# module, and the submission zip is flat.
 
 # Working data at the repo root: generated opening sets, caches. The leading
 # slash matters - a bare `data/` would also match book/data/, and git will not

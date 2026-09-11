@@ -51,8 +51,7 @@ import random
 import subprocess
 import sys
 
-ENGINE_DEFAULT = (r"C:\Users\Gustavo\Documents\Chess"
-              r"\BanksiaGui-0.58-win64\bsg-engines\stockfish_15.1_x64_bmi2.exe")
+ENGINE_DEFAULT = "stockfish"   # resolved from PATH; override with BTC_ANALYSER
 ENGINE_PATH = os.environ.get("BTC_ANALYSER", ENGINE_DEFAULT)
 
 # A mate is not a centipawn score, but regret has to be a number. Scoring mates

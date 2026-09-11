@@ -3,8 +3,7 @@
 Structure differs from the C engine in one deliberate way: the C code rebuilds
 its attack and mobility accumulators inside every makeMove, including on nodes
 that never evaluate. Here they are built inside evaluate() on demand, which
-removes that waste and structurally prevents the stale-accumulator class of bug
-(see docs/ENGINE_AUDIT.md and docs/BTC_UPSTREAM_ISSUES.md).
+removes that waste and structurally prevents the stale-accumulator class of bug.
 
 Terms: material, piece-square tables, mobility with pin-excluded areas and
 x-rays, outposts, minor behind pawn, king protector distance, rook on open and
@@ -18,7 +17,7 @@ import os
 import numpy as np
 from numba import int64, njit, uint64
 
-# Compile budget is a live constraint (see docs/PROGRESS.md), so the heavier
+# Compile budget is a live constraint, so the heavier
 # optional terms are toggleable and can be cut without touching the code.
 # Threats is on: it scored 63.3% over 30 games once the specialised endgames
 # were in place (50.0% without them, because it inflates the score in won
@@ -461,7 +460,7 @@ def _passer_path(bb, sq, side, push, w, span, to_queen, mg, eg, own_pawn_att,
     Deliberately not bit-exact with BTC. In the C the local `int r` shadows the
     black-rook piece enum, so `bitboards[r]` reads black pawns and any enemy
     pawn behind the passer is mistaken for a rook controlling the file, which
-    deletes the bonus. See docs/BTC_UPSTREAM_ISSUES.md item 4."""
+    deletes the bonus."""
     them_occ = bb[OCC_B] if side == WHITE else bb[OCC_W]
     us_occ = bb[OCC_W] if side == WHITE else bb[OCC_B]
     behind = BLACK_FORWARD_FILE[sq] if side == WHITE else WHITE_FORWARD_FILE[sq]
@@ -1446,7 +1445,7 @@ def _hand_crafted(bb, st):
     # int64() rather than the bare WHITE/BLACK constants: numba specialises
     # on integer literals, so passing the constants compiled every function
     # reached from here twice, once per colour, doubling the eval's share of
-    # the init budget. See docs/PROGRESS.md.
+    # the init budget.
     side_w = int64(WHITE)
     side_b = int64(BLACK)
 

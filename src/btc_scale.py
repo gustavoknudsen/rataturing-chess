@@ -182,7 +182,7 @@ def _specialized_scale(bb, st, strong):
     # the specific rules are tested before the general KB-and-pawns one. In
     # the C the general branch comes first and returns -1 unconditionally, and
     # its guard is implied by theirs, so KBP vs KB and KBP vs KN can never fire
-    # there. See docs/BTC_UPSTREAM_ISSUES.md item 5.
+    # there.
     s_bishops = count_bits(bb[B] if strong == WHITE else bb[B + 6])
     if npm_strong == BISHOP_V and s_count >= 1 and s_bishops == 1:
         if npm_weak == BISHOP_V and s_count == 1 and w_count == 0:

@@ -2,7 +2,7 @@
 
 Why the engine is built the way it is. Each entry states the constraint, the options, and the decision. Measurements are from the development machine (Windows, Python 3.12, numba 0.67.0, numpy 2.5.2, python-chess 1.11.2). The match machine is a single EPYC 9V74 core and is slower, so local numbers are optimistic by roughly 1.5x to 2x.
 
-Rataturing is built on BetterThanCris (BTC), a C++ engine by the same author. The rules ban third-party engines and any port or translation of one, and explicitly permit your own work; BTC is the author's own engine. See `RULES.md`.
+Rataturing is built on BetterThanCris (BTC), a C engine by the same author, since extended with C++ files and utilities. The rules ban third-party engines and any port or translation of one, and explicitly permit your own work; BTC is the author's own engine. See `RULES.md`.
 
 ## 1. Numba is the platform, and it sets the rules
 
@@ -38,7 +38,7 @@ Source, target, piece, promotion and flags in one integer. A struct of arrays wo
 
 The platform allows 90 seconds before the clock starts, and no output within that window is a loss. Compiling lazily would mean paying for it inside the first move's time budget. Everything compiles during import instead.
 
-Measured init on an idle machine is about 56 seconds cold against the 90 second budget. It is load sensitive: measured under a saturated CPU it reached 89 seconds, which is a reason not to benchmark during a match rather than a reason to worry about the platform.
+Measured init from the packaged zip is about 30 to 55 seconds cold against the 90 second budget, depending on machine load. It is load sensitive: measured under a saturated CPU it reached 89 seconds, which is a reason not to benchmark during a match rather than a reason to worry about the platform.
 
 ## 7. Transposition table sizing
 
@@ -53,7 +53,7 @@ The referee sends a FEN per move and nothing else, but repetition and the fifty-
 
 ## 9. Network width: smaller than it looks like it should be
 
-The shipped network is HalfKAv2-style, 32 king buckets by 11 piece planes into L1 = 512, with 8 output buckets keyed on piece count. Wider was tried and rejected on measurement, not taste.
+The shipped network is king-bucketed: 32 king buckets by 768 features each (12 piece planes by 64 squares) into L1 = 512, with 8 output buckets keyed on piece count. That is 24,576 inputs. Wider was tried and rejected on measurement, not taste.
 
 | L1 = 1024 against L1 = 512 | |
 |---|---|

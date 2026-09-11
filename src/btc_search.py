@@ -1,11 +1,18 @@
-"""Search ported from BTC search.cpp, phase 2 subset.
+"""The search, ported from BTC and extended.
 
-Implements iterative deepening with aspiration windows, PVS, a bucketed
-transposition table, killer and history move ordering, null-move pruning,
-reverse futility pruning, mate distance pruning, the improving heuristic,
-repetition and fifty-move draw detection, in-check extension and a
-captures-only quiescence search. LMR, SEE, continuation history, singular
-extensions and ProbCut land in later phases per docs/PLAN.md.
+Iterative deepening with aspiration windows, PVS and a bucketed
+transposition table. Move ordering from killers, counter moves, main and
+continuation history, and SEE for captures. Pruning and reductions: null
+move with an adaptive reduction, reverse futility, razoring, futility,
+late move pruning, late move reductions, SEE pruning, internal iterative
+reductions and ProbCut. Extensions: in-check, and the singular family
+with multicut and a negative extension. Correction history adjusts the
+static evaluation. Draws by repetition and the fifty-move rule are
+detected here; quiescence is captures-only, with evasions when in check.
+
+One function, deliberately. numba 0.67 compiles self-recursion but not
+mutual recursion, so any helper that calls back into negamax fails to
+compile and the whole search has to live in one place.
 
 Feature flags (environment, read at import so numba freezes them into the
 compiled code): BTC_MINIMAL=1 disables TT, null move, RFP and mate distance
@@ -79,10 +86,10 @@ USE_QS_DELTA = not MINIMAL and _flag("BTC_QS_DELTA_PRUNE")
 # computes in_check - so quiescence is the only place the position can be
 # handled correctly.
 USE_QS_EVASION = not MINIMAL and _flag("BTC_QS_EVASION")
-# Draw-rule corrections, AUDIT.md items 1, 3, 4 and 5. Default ON: shipped
+# Draw-rule corrections, Four draw-rule corrections. Default ON: shipped
 # in batch 2 (24W 52D 13L over 89 games, 56.2%).
 USE_DRAW_FIX = not MINIMAL and _flag("BTC_DRAW_FIX")
-# AUDIT.md item 2 - a second occurrence against game history is not a draw -
+# A second occurrence against game history is not a draw -
 # on its own flag, and OFF even when the rest of the group is on.
 #
 # It is correct by the rules and it measured *negative*: over 72 games it raised
@@ -199,7 +206,7 @@ USE_DEPTH_CLAMP = not MINIMAL and os.environ.get("BTC_DEPTH_CLAMP") == "1"
 # bonus. Separate flag so a grouped result stays bisectable.
 USE_HIST_DEPTH_FLOOR = not MINIMAL and os.environ.get("BTC_HIST_DEPTH_FLOOR") == "1"
 # Correction history. Default ON, and matched: +113 =85 -102 over 300 games,
-# 51.8%, +13 elo [-27, +52] (docs/PROGRESS.md). It cuts the static
+# 51.8%, +13 elo [-27, +52]. It cuts the static
 # evaluation's mean absolute prediction error over the benchmark from 562.9
 # to 458.9, an 18.5% improvement.
 #
@@ -1723,7 +1730,7 @@ def _node_prologue(acc, alpha, beta, depth, ply, rep_idx, pv_node, bb, st, undo_
     # returns a mating drive score and insufficient_material() returns a flat 0.
     # This is the same hazard that broke KBN vs K with delta pruning and KR vs K
     # with correction history; these three inherit it from BTC and were the last
-    # unguarded cases. See docs/BTC_UPSTREAM_ISSUES.md item 8.
+    # unguarded cases.
     material_scale = count_bits(bb[OCC_A]) > SPECIALISED_MAX_PIECES
     quiet_node = not pv_node and not in_check and \
         (material_scale or not USE_EVAL_SCALE_GUARD)

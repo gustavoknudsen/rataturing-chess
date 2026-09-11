@@ -119,8 +119,12 @@ def main():
     else:
         _SRC = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
                             _os.pardir, "src")
-        nets = [("no buckets", _os.path.join(_SRC, "net.npz")),
-                ("4 buckets ", "D:/chess_nnue/sw_buckets/net.npz")]
+        nets = [("no buckets", _os.path.join(_SRC, "net.npz"))]
+        # A second, differently bucketed net is worth checking when one is
+        # around, but it is not part of the repository. Opt in with BTC_NET2.
+        second = _os.environ.get("BTC_NET2", "")
+        if second:
+            nets.append(("4 buckets ", second))
     total = 0
     for label, path in nets:
         print(f"{label} ({path}), depth {depth}:")

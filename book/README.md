@@ -100,6 +100,7 @@ A small reference set is tracked, because it shows what the book was built from:
 | `conflicts.tsv` | positions where sources disagreed |
 | `labels.tsv`, `labels_d30.tsv` | a sample of our own engine labelling |
 | `hedge_tolabel.txt`, `round1.txt` | hedge working sets |
+| `need_candidates_ordered.txt` | expansion queue order |
 
 `data/engines/` and `data/books/` are ignored entirely and do not appear in the repository; `data/README.txt` records what belongs in them.
 
