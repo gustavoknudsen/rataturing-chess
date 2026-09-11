@@ -18,8 +18,11 @@ submission*.zip
 src/net.npz
 src/*.bin
 
-# Working data: generated opening sets, caches.
-data/
+# Working data at the repo root: generated opening sets, caches. The leading
+# slash matters - a bare `data/` would also match book/data/, and git will not
+# re-include files inside an excluded directory, so the book's tracked
+# reference set would silently vanish.
+/data/
 
 # Old champion builds, superseded submissions and backups. Kept on disk for
 # diffing against past versions, never in the repo.
@@ -37,3 +40,26 @@ training/notebooks/*
 # Compiled helpers for the training data pipeline.
 tools/*.exe
 tools/*.obj
+
+# Opening-book pipeline data.
+#
+# The bulk stays out: harvested PGNs, full label tables and source .bin books
+# come to roughly 1.3 GB. A small reference set IS tracked, because it is what
+# shows the book's provenance - which positions it had to answer, and a sample
+# of our own engine labelling of them.
+#
+# engines/ and books/ hold binaries and source books. They are ignored, so
+# they do not appear in the repository at all; book/data/README.txt says what
+# belongs in them.
+book/data/*
+!book/data/README.txt
+!book/data/start_fens.txt
+!book/data/starts_clean.txt
+!book/data/starts_deep.txt
+!book/data/candidates16.tsv
+!book/data/conflicts.tsv
+!book/data/need_candidates_ordered.txt
+!book/data/labels.tsv
+!book/data/labels_d30.tsv
+!book/data/hedge_tolabel.txt
+!book/data/round1.txt

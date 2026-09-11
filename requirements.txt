@@ -1,0 +1,9 @@
+# Engine runtime. These versions match the competition platform image; the
+# engine is compiled by numba at import and is sensitive to both.
+numba==0.67.0
+numpy==2.5.2
+chess==1.11.2
+
+# llvmlite is numba's compiler backend and is installed with it. Pinned
+# because btc_nrt patches numba's reference-counting at this version.
+llvmlite==0.49.0

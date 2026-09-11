@@ -1,0 +1,308 @@
+rn1qkb1r/pp2nppp/2p1p3/3pP3/2PPb3/5N1P/PP1N1PP1/R1BQKB1R b KQkq - 2 7 ; Caro-Kann Advance ; games=56 ; white_score=0.6161
+rn1qkbnr/pp3ppp/2p1p3/3pPb2/3P4/5N2/PPPN1PPP/R1BQKB1R b KQkq - 1 5 ; Caro-Kann Advance ; games=53 ; white_score=0.5849
+rn1qkbnr/pp3ppp/4p3/2ppPb2/3P4/2P2N2/PP2BPPP/RNBQK2R b KQkq - 1 6 ; Caro-Kann Advance ; games=52 ; white_score=0.4712
+rn1qkbnr/pp3ppp/2p1p3/3pPb2/3P4/2P2N2/PP3PPP/RNBQKB1R b KQkq - 0 5 ; Caro-Kann Advance ; games=41 ; white_score=0.5488
+r2qkbnr/pp1n1ppp/4p3/1BppPb2/3P4/5N2/PPPN1PPP/R1BQ1RK1 b kq - 3 7 ; Caro-Kann Advance ; games=35 ; white_score=0.4714
+rn1qkbnr/pp2pppp/2p3b1/8/3P3P/6N1/PPP2PP1/R1BQKBNR b KQkq - 0 6 ; Caro-Kann Classical ; games=57 ; white_score=0.6228
+rn1qkbnr/pp2pppp/2p3b1/8/3P4/4B1N1/PPP2PPP/R2QKBNR b KQkq - 4 6 ; Caro-Kann Classical ; games=57 ; white_score=0.5702
+rn1qkb1r/pp2pppp/2p2nb1/8/3P4/2P3N1/PP2NPPP/R1BQKB1R b KQkq - 0 7 ; Caro-Kann Classical ; games=51 ; white_score=0.5196
+rn1qkbnr/pp2pppp/2p3b1/8/3P4/6N1/PPP1NPPP/R1BQKB1R b KQkq - 4 6 ; Caro-Kann Classical ; games=51 ; white_score=0.4804
+rn1qkbnr/pp3ppp/2p1p1b1/8/3P3P/4B1N1/PPP2PP1/R2QKBNR b KQkq - 0 7 ; Caro-Kann Classical ; games=48 ; white_score=0.4479
+rn1qkbnr/pp2ppp1/2p3bp/8/3P3P/5NN1/PPP2PP1/R1BQKB1R b KQkq - 1 7 ; Caro-Kann Classical ; games=48 ; white_score=0.4688
+rn1qkb1r/pp2pppp/2p2nb1/8/3P1B2/5NN1/PPP2PPP/R2QKB1R b KQkq - 6 7 ; Caro-Kann Classical ; games=46 ; white_score=0.5543
+r2qkb1r/pp1npppp/2p2nb1/8/3P3P/2P3N1/PP2NPP1/R1BQKB1R b KQkq - 0 8 ; Caro-Kann Classical ; games=38 ; white_score=0.5789
+rn1qkbnr/pp2pppp/2p3b1/8/3P1B2/6N1/PPP2PPP/R2QKBNR b KQkq - 4 6 ; Caro-Kann Classical ; games=37 ; white_score=0.4054
+r2qkb1r/pp2pppp/2n2n2/3p4/3P1Bb1/1QPB4/PP3PPP/RN2K1NR b KQkq - 4 7 ; Caro-Kann Exchange ; games=60 ; white_score=0.6333
+r1bqkb1r/pp2pppp/2n2n2/3p4/3P1B2/2PB4/PP3PPP/RN1QK1NR b KQkq - 2 6 ; Caro-Kann Exchange ; games=58 ; white_score=0.5517
+r1bqkb1r/pp3ppp/5n2/3pn3/8/2PB4/PP2NPPP/RNBQK2R w KQkq - 0 8 ; Caro-Kann Exchange ; games=48 ; white_score=0.4583
+r1bqkb1r/pp2pppp/2n2n2/3p4/3P4/2PB4/PP2NPPP/RNBQK2R b KQkq - 2 6 ; Caro-Kann Exchange ; games=46 ; white_score=0.5326
+r1bqkb1r/pp2pppp/2n2n2/3p4/3P4/2PB4/PP1N1PPP/R1BQK1NR b KQkq - 2 6 ; Caro-Kann Exchange ; games=45 ; white_score=0.5556
+r1bqkb1r/pp2pppp/2n2n2/3p4/3P4/2PB3P/PP3PP1/RNBQK1NR b KQkq - 0 6 ; Caro-Kann Exchange ; games=45 ; white_score=0.6222
+r1bqkb1r/pp2pppp/2n2n2/3p2B1/3P4/2PB4/PP3PPP/RN1QK1NR b KQkq - 2 6 ; Caro-Kann Exchange ; games=44 ; white_score=0.4886
+r3kb1r/pp1qpppp/2n2n2/3p4/3P1Bb1/1QPB3P/PP3PP1/RN2K1NR b KQkq - 0 8 ; Caro-Kann Exchange ; games=40 ; white_score=0.5125
+rnbq1rk1/1pp1bppp/4pn2/p2p4/2PP4/5NP1/PP2PPBP/RNBQ1RK1 w - - 0 7 ; Catalan Opening ; games=61 ; white_score=0.3525
+rnbq1rk1/pp2bppp/2p1pn2/3p4/2PP4/5NP1/PP2PPBP/RNBQ1RK1 w - - 0 7 ; Catalan Opening ; games=58 ; white_score=0.5431
+r1bq1rk1/pp1nbpp1/2p1pn1p/3p4/2PP4/5NP1/PPQ1PPBP/RNBR2K1 w - - 2 9 ; Catalan Opening ; games=48 ; white_score=0.5417
+rnbq1rk1/p3bppp/1pp1pn2/3p4/2PP4/1P3NP1/P3PPBP/RNBQ1RK1 w - - 0 8 ; Catalan Opening ; games=48 ; white_score=0.4062
+rnbq1rk1/pp2bpp1/2p1pn1p/3p4/2PP4/5NP1/PPQ1PPBP/RNB2RK1 w - - 0 8 ; Catalan Opening ; games=42 ; white_score=0.5833
+rnbqk2r/ppp3pp/3bpn2/3p1p2/3P1B2/4PNP1/PPP2PBP/RN1QK2R b KQkq - 0 6 ; Dutch Stonewall ; games=62 ; white_score=0.5000
+rnbqkb1r/ppp3pp/4pn2/3p1p2/3P3P/5NP1/PPP1PPB1/RNBQK2R b KQkq - 0 5 ; Dutch Stonewall ; games=52 ; white_score=0.4808
+rnbqk2r/ppp3pp/4pn2/3p1p2/1b1P4/1PP2NP1/P3PPBP/RNBQK2R b KQkq - 0 6 ; Dutch Stonewall ; games=48 ; white_score=0.5417
+rnbqk2r/pp2b1pp/2p1pn2/3p1p2/2PP3P/5NP1/PPQ1PPB1/RNB1K2R b KQkq - 1 7 ; Dutch Stonewall ; games=41 ; white_score=0.6220
+rnbqk2r/pp4pp/2pbpn2/3p1p2/2PP4/2N2NP1/PP2PPBP/R1BQ1RK1 b kq - 1 7 ; Dutch Stonewall ; games=35 ; white_score=0.4000
+rnbqk2r/ppp3pp/3bpn2/3p1p2/2PP4/5NP1/PP2PPBP/RNBQ1RK1 b kq - 0 6 ; Dutch Stonewall ; games=35 ; white_score=0.5714
+rnbqk2r/ppp3pp/3bpn2/3p1p2/2PP4/1P3NP1/P3PPBP/RNBQK2R b KQkq - 0 7 ; Dutch Stonewall ; games=34 ; white_score=0.5000
+r1bq1rk1/1p2ppbp/p1np1np1/2p5/2P4P/2NP1NP1/PP2PPB1/1RBQK2R w K - 0 9 ; English Symmetrical ; games=64 ; white_score=0.4766
+r1bqk2r/pp1pppbp/2n2np1/2p5/2P5/2N2NPP/PP1PPPB1/R1BQK2R b KQkq - 0 6 ; English Symmetrical ; games=56 ; white_score=0.5089
+r1bq1rk1/pp2ppbp/2np1np1/2p5/2P4P/2NP1NP1/PP2PPB1/1RBQK2R b K - 1 8 ; English Symmetrical ; games=55 ; white_score=0.5091
+r1bqk2r/pp1pppbp/2n2np1/2p5/2P5/2NP1NP1/PP2PPBP/R1BQK2R b KQkq - 0 6 ; English Symmetrical ; games=55 ; white_score=0.4727
+r1bqk2r/pp1pppbp/2n2np1/2p5/Q1P5/2N2NP1/PP1PPPBP/R1B1K2R b KQkq - 5 6 ; English Symmetrical ; games=54 ; white_score=0.5278
+r1bqk2r/pp1pppbp/2n2np1/2p5/P1P5/2N2NP1/1P1PPPBP/R1BQK2R b KQkq - 0 6 ; English Symmetrical ; games=54 ; white_score=0.5185
+r1bqk2r/pp1pppbp/2n2np1/2p5/2P5/2N1PNP1/PP1P1PBP/R1BQK2R b KQkq - 0 6 ; English Symmetrical ; games=53 ; white_score=0.5094
+r1bq1rk1/pp2ppbp/2n3p1/2pn4/3P4/2N1PNP1/PP3PBP/R1BQK2R w KQ - 0 9 ; English Symmetrical ; games=53 ; white_score=0.5000
+r1bq1rk1/pp1pppbp/2n2np1/2p5/2PP4/2N2NP1/PP2PPBP/R1BQ1RK1 b - - 0 7 ; English Symmetrical ; games=50 ; white_score=0.5400
+r1bq1rk1/pp2ppbp/2np1np1/2p5/2P4P/2NP1NP1/PP2PPB1/R1BQK2R w KQ - 0 8 ; English Symmetrical ; games=49 ; white_score=0.5102
+r1bq1rk1/pp2ppbp/2np1np1/2pP4/2P5/2N2NP1/PP2PPBP/R1BQ1RK1 b - - 0 8 ; English Symmetrical ; games=47 ; white_score=0.5319
+r1bqk2r/pp1pppbp/2n2np1/2p5/2P5/2N2NP1/PP1PPPBP/R1BQ1RK1 b kq - 5 6 ; English Symmetrical ; games=45 ; white_score=0.5778
+r1bq1rk1/pp1pppbp/2n2np1/2p5/2PP4/2N1PNP1/PP3PBP/R1BQK2R b KQ - 0 7 ; English Symmetrical ; games=45 ; white_score=0.5556
+r1bqk2r/pp2ppbp/2n2np1/2pp4/2P5/2N2NPP/PP1PPPB1/R1BQK2R w KQkq - 0 7 ; English Symmetrical ; games=45 ; white_score=0.4667
+r1bq1rk1/pp1pppbp/2n2np1/2p5/P1P5/2NP1NP1/1P2PPBP/R1BQK2R b KQ - 0 7 ; English Symmetrical ; games=44 ; white_score=0.5909
+r1bqk2r/pp1pppbp/2n2np1/2p5/2P4P/2N2NP1/PP1PPPB1/R1BQK2R b KQkq - 0 6 ; English Symmetrical ; games=41 ; white_score=0.4146
+r1bqk2r/pp2ppbp/2n3p1/2pn4/8/2N1PNP1/PP1P1PBP/R1BQ1RK1 b kq - 1 8 ; English Symmetrical ; games=40 ; white_score=0.4625
+r1bq1rk1/pp1pppbp/2n2np1/2p5/2P5/2NP1NP1/PP2PPBP/R1BQ1RK1 b - - 2 7 ; English Symmetrical ; games=38 ; white_score=0.5000
+r1bqk2r/ppp2ppp/2p2n2/4p3/4P3/P1P2N2/2PP1PPP/R1BQK2R b KQkq - 0 7 ; Four Knights Game ; games=61 ; white_score=0.4754
+r1bq1rk1/pppp1ppp/2n2n2/1B2p3/4P3/2P2N1P/PPP2PP1/R1BQ1RK1 b - - 0 7 ; Four Knights Game ; games=51 ; white_score=0.5490
+r1bqk2r/pppp1ppp/2n2n2/1B2p3/1b2P3/2NP1N2/PPP2PPP/R1BQK2R b KQkq - 0 5 ; Four Knights Game ; games=42 ; white_score=0.4286
+r1bqk2r/pppp1ppp/5n2/4p3/Bb1nP3/2NP1N2/PPP2PPP/R1BQK2R b KQkq - 2 6 ; Four Knights Game ; games=41 ; white_score=0.5366
+r1b1kbnr/pp3ppp/4p3/3pP3/1n1P4/1P3N2/1P3PPP/RNB1KB1R w KQkq - 1 9 ; French Advance ; games=48 ; white_score=0.5000
+r3kbnr/pp1b1ppp/1qn1p3/3pP3/3P4/5N1P/PP2BPP1/RNBQK2R b KQkq - 0 8 ; French Advance ; games=47 ; white_score=0.5106
+r1b1kbnr/pp3ppp/2n1p3/3pP3/3P4/1P3N2/1P3PPP/RNB1KB1R b KQkq - 0 8 ; French Advance ; games=41 ; white_score=0.4146
+r1b1kbnr/pp3ppp/1qn1p3/3pP3/3P4/5N2/PP2BPPP/RNBQK2R b KQkq - 0 7 ; French Advance ; games=29 ; white_score=0.4655
+rnbqkb1r/pp1n1ppp/4p3/2ppP3/3P1P2/8/PPP1N1PP/R1BQKBNR b KQkq - 1 6 ; French Classical ; games=56 ; white_score=0.5446
+r1bqkb1r/pp1n1ppp/2n1p3/2ppP3/3P1P2/2NB4/PPP3PP/R1BQK1NR w KQkq - 2 7 ; French Classical ; games=53 ; white_score=0.5566
+r1bqk2r/pp1n1ppp/2n1p3/2bpP3/5P2/2NB1N2/PPP3PP/R1BQK2R b KQkq - 1 8 ; French Classical ; games=50 ; white_score=0.5000
+r1bqk2r/pp1nbppp/2n1p3/2ppP3/3P1P2/2P2N2/PP2N1PP/R1BQKB1R b KQkq - 2 8 ; French Classical ; games=49 ; white_score=0.5408
+rnbqkb1r/pp1n1ppp/4p3/3pP3/3Q1P2/2N1B3/PPP3PP/R3KBNR b KQkq - 0 7 ; French Classical ; games=48 ; white_score=0.5312
+r1bqk2r/pp1n1ppp/2n1p3/2bpP3/5P2/2NB4/PPP3PP/R1BQK1NR w KQkq - 0 8 ; French Classical ; games=47 ; white_score=0.4787
+rnbqkb1r/pp1n1ppp/4p3/2ppP3/3P1P2/2NB4/PPP3PP/R1BQK1NR b KQkq - 1 6 ; French Classical ; games=39 ; white_score=0.4872
+rnbqkb1r/pp3ppp/5n2/2pp4/3P4/8/PPPNBPPP/R1BQK1NR w KQkq - 2 6 ; French Tarrasch ; games=55 ; white_score=0.6000
+rnbqkbnr/pp3ppp/8/2pp4/P2P4/8/1PPN1PPP/R1BQKBNR b KQkq - 0 5 ; French Tarrasch ; games=55 ; white_score=0.4364
+rnbqkbnr/pp3ppp/8/2pp4/3P4/7P/PPPN1PP1/R1BQKBNR b KQkq - 0 5 ; French Tarrasch ; games=54 ; white_score=0.5741
+rnbqk1nr/pp3ppp/8/2bp4/8/1N6/PPP2PPP/R1BQKBNR b KQkq - 1 6 ; French Tarrasch ; games=52 ; white_score=0.4231
+rnbqk1nr/bp3ppp/p7/3p4/P7/1N6/1PP2PPP/R1BQKBNR w KQkq - 2 8 ; French Tarrasch ; games=50 ; white_score=0.3400
+rn2kb1r/pp1q1ppp/5n2/2pp4/3P4/7P/PPPN1PP1/R1BQK1NR w KQkq - 0 8 ; French Tarrasch ; games=48 ; white_score=0.5208
+r1bqkbnr/pp3ppp/2n5/2pp4/3P4/P4N2/1PPN1PPP/R1BQKB1R b KQkq - 2 6 ; French Tarrasch ; games=46 ; white_score=0.5000
+rnbqk1nr/1p3ppp/p7/2bp4/P7/1N6/1PP2PPP/R1BQKBNR b KQkq - 1 7 ; French Tarrasch ; games=40 ; white_score=0.4625
+r1b1k2r/pp2nppp/2n1p3/q1ppP3/P2P4/2P2N2/2PB1PPP/R2QKB1R b KQkq - 4 9 ; French Winawer ; games=62 ; white_score=0.5968
+rnbqk2r/p3nppp/1p2p3/2ppP3/P2P4/2P2N2/2P2PPP/R1BQKB1R b KQkq - 0 8 ; French Winawer ; games=54 ; white_score=0.5741
+rnbqk2r/pp2nppp/4p3/2ppP3/3P4/P1P5/2P2PPP/1RBQKBNR b Kkq - 2 7 ; French Winawer ; games=49 ; white_score=0.5000
+rnb1k2r/pp2nppp/4p3/q1ppP3/3P4/P1P5/2PB1PPP/1R1QKBNR b Kkq - 4 8 ; French Winawer ; games=47 ; white_score=0.7021
+rnbqk2r/pp2nppp/4p3/2ppP3/3P4/P1P2N2/2P2PPP/R1BQKB1R b KQkq - 2 7 ; French Winawer ; games=34 ; white_score=0.6324
+r1bqk2r/pp2nppp/2n1p3/2ppP3/P2P4/2P2N2/2P2PPP/R1BQKB1R b KQkq - 2 8 ; French Winawer ; games=33 ; white_score=0.5909
+rnbqk2r/pp2ppbp/6p1/2p5/3PP3/2P1BN2/P4PPP/R2QKB1R b KQkq - 1 8 ; Grunfeld Defence ; games=54 ; white_score=0.5093
+r1bqk2r/pppnppbp/6p1/8/Q2PP3/2P2N2/P4PPP/R1B1KB1R b KQkq - 4 8 ; Grunfeld Defence ; games=52 ; white_score=0.5577
+rnbq1rk1/ppp1ppbp/6p1/8/3PP3/2P5/P3BPPP/1RBQK1NR b K - 4 8 ; Grunfeld Defence ; games=45 ; white_score=0.6000
+rnbqk2r/ppp1ppbp/6p1/8/3PP3/2P1B3/P4PPP/R2QKBNR b KQkq - 2 7 ; Grunfeld Defence ; games=44 ; white_score=0.6136
+rnbqk2r/ppp1ppbp/6p1/8/3PP3/2P2N2/P4PPP/R1BQKB1R b KQkq - 2 7 ; Grunfeld Defence ; games=42 ; white_score=0.5714
+rnbqk2r/ppp1ppbp/6p1/8/3PP3/2P5/P4PPP/1RBQKBNR b Kkq - 2 7 ; Grunfeld Defence ; games=42 ; white_score=0.4643
+rn1qk2r/pp2ppbp/6p1/2p5/3PP1b1/2P1BN2/P4PPP/2RQKB1R b Kkq - 3 9 ; Grunfeld Defence ; games=40 ; white_score=0.5125
+r1bqk2r/ppp2ppp/1bnp1n2/4p3/PPB1P3/2PP1N2/5PPP/RNBQK2R b KQkq - 0 7 ; Italian Game ; games=57 ; white_score=0.5351
+r1bqk2r/ppp2ppp/2np1n2/2b1p3/2B1P3/2PP1N2/PP1N1PPP/R1BQK2R b KQkq - 1 6 ; Italian Game ; games=52 ; white_score=0.6731
+r1bqk2r/ppp2pp1/2np1n1p/2b1p3/4P3/1BPP1N2/PP3PPP/RNBQ1RK1 b kq - 1 7 ; Italian Game ; games=50 ; white_score=0.4800
+r1bq1rk1/ppp2ppp/2np1n2/2b1p3/2B1P3/2PP1N2/PP1N1PPP/R1BQ1RK1 b - - 3 7 ; Italian Game ; games=50 ; white_score=0.6500
+r1bq1rk1/1pp2ppp/p1np1n2/2b1p3/2B1P3/2PP1N1P/PP1N1PP1/R1BQ1RK1 b - - 0 8 ; Italian Game ; games=49 ; white_score=0.5306
+r1bqk2r/ppp2ppp/2np1n2/2b1p3/P1B1P3/2PP1N2/1P3PPP/RNBQK2R b KQkq - 0 6 ; Italian Game ; games=49 ; white_score=0.5816
+r1bqk2r/1pp2ppp/1bnp1n2/pP2p3/P1B1P3/2PP1N2/5PPP/RNBQK2R b KQkq - 0 8 ; Italian Game ; games=49 ; white_score=0.5408
+r1bqk2r/1pp2pp1/p1np1n1p/2b1p3/4P3/1BPP1N2/PP3PPP/RNBQR1K1 b kq - 1 8 ; Italian Game ; games=42 ; white_score=0.5833
+rnbq1rk1/ppp2pbp/5np1/4p3/2P1P3/2N1BN2/PP2BPPP/R2QK2R b KQ - 1 8 ; King's Indian Classical ; games=62 ; white_score=0.3952
+r1bq1rk1/ppp2pbp/n2p1np1/4p3/2PPP3/2NQ1N2/PP2BPPP/R1B1K2R w KQ - 2 8 ; King's Indian Classical ; games=59 ; white_score=0.5254
+rnbqr1k1/ppp2pbp/3p1np1/8/2PNP3/2N1B3/PPQ1BPPP/R3K2R b KQ - 2 9 ; King's Indian Classical ; games=56 ; white_score=0.4821
+rnbq1rk1/1pp2pbp/3p1np1/p2Pp3/2P1P3/2N2N1P/PP2BPP1/R1BQK2R b KQ - 0 8 ; King's Indian Classical ; games=53 ; white_score=0.4245
+rnbq1rk1/ppp2pbp/3p1np1/4p3/2PPP3/P1N2N2/1P2BPPP/R1BQK2R b KQ - 0 7 ; King's Indian Classical ; games=53 ; white_score=0.5283
+rnbq1rk1/ppp2pbp/3p1np1/4p3/2PPP3/2N2N2/PP2BPPP/1RBQK2R b K - 1 7 ; King's Indian Classical ; games=50 ; white_score=0.5500
+r1b1qrk1/ppp2pbp/n2p2p1/4p1B1/2PPP1n1/2NQ1N2/PP2BPPP/R3K2R w KQ - 6 10 ; King's Indian Classical ; games=50 ; white_score=0.5200
+rnbq1rk1/ppp2pbp/3p1np1/4p3/2PPP3/2NQ1N2/PP2BPPP/R1B1K2R b KQ - 1 7 ; King's Indian Classical ; games=48 ; white_score=0.5208
+r1bq1rk1/ppp2pbp/2np1np1/3Pp3/2P1P3/P1N2N2/1P2BPPP/R1BQK2R b KQ - 0 8 ; King's Indian Classical ; games=47 ; white_score=0.5532
+rnbq1rk1/ppp2pbp/3p1np1/8/2PNP3/2N1B3/PP2BPPP/R2QK2R b KQ - 0 8 ; King's Indian Classical ; games=44 ; white_score=0.5000
+rnbq1rk1/ppp2pbp/3p1np1/3Pp3/2P1P3/2N2N2/PP2BPPP/R1BQK2R b KQ - 0 7 ; King's Indian Classical ; games=37 ; white_score=0.4189
+r1bqkb1r/pp3ppp/2n1pn2/2pp4/3P1B2/P1P1P3/1P1N1PPP/R2QKBNR b KQkq - 0 6 ; London System ; games=58 ; white_score=0.4397
+r1bqkb1r/pp3ppp/2n1pn2/2pp4/3P4/2P1P1B1/PP1N1PPP/R2QKBNR b KQkq - 1 6 ; London System ; games=56 ; white_score=0.4821
+r1bqkb1r/pp3ppp/2n1pn2/2pp4/3P1B2/2P1P3/PP1NBPPP/R2QK1NR b KQkq - 1 6 ; London System ; games=56 ; white_score=0.5982
+r1bq1rk1/pp3ppp/2nbpn2/1Bpp4/3P1B2/2P1P2N/PP1N1PPP/R2QK2R w KQ - 4 8 ; London System ; games=55 ; white_score=0.5455
+r1b1k2r/pp3ppp/2nqpn2/2pp4/3P4/2P1P2P/PP1N1PP1/R2QKBNR w KQkq - 0 8 ; London System ; games=53 ; white_score=0.4151
+r1bqk2r/pp3ppp/2nbpn2/2pp4/3P4/P1P1P1B1/1P1N1PPP/R2QKBNR b KQkq - 2 7 ; London System ; games=52 ; white_score=0.5385
+r1bq1rk1/pp2bppp/2n1pn2/2pp4/3P4/2PBP1B1/PP1NNPPP/R2QK2R b KQ - 5 8 ; London System ; games=49 ; white_score=0.5816
+r1bqk2r/pp3ppp/2nbpn2/2pp4/3P1B2/P1P1P3/1P1N1PPP/R2QKBNR w KQkq - 1 7 ; London System ; games=47 ; white_score=0.4574
+r1bqkb1r/pp3ppp/2n1pn2/2pp4/3P1B2/2PBP3/PP1N1PPP/R2QK1NR b KQkq - 1 6 ; London System ; games=45 ; white_score=0.6444
+r1bqk2r/pp3ppp/2nbpn2/1Bpp4/3P1B2/2P1P2N/PP1N1PPP/R2QK2R b KQkq - 3 7 ; London System ; games=44 ; white_score=0.4205
+r1bqkb1r/pp3ppp/2n1pn2/2pp4/3P1B2/2P1P2P/PP1N1PP1/R2QKBNR b KQkq - 0 6 ; London System ; games=43 ; white_score=0.5349
+r1bqk2r/pp3ppp/2nbpn2/2pp4/3P1B2/2P1P2N/PP1N1PPP/R2QKB1R w KQkq - 2 7 ; London System ; games=43 ; white_score=0.5349
+r1b2rk1/pp3ppp/2nqpn2/2pp4/3P4/2P1PN2/PP1NBPPP/R2QK2R w KQ - 2 9 ; London System ; games=42 ; white_score=0.3571
+r1b1k2r/pp3ppp/2nqpn2/2pp4/3P4/2P1PN2/PP1NBPPP/R2QK2R b KQkq - 1 8 ; London System ; games=38 ; white_score=0.4342
+rnbq1rk1/ppp2ppp/4pn2/8/1bBP4/2N1P2P/PP3PP1/R1BQK1NR b KQ - 0 7 ; Nimzo-Indian Defence ; games=61 ; white_score=0.5000
+rnbq1rk1/ppp2ppp/4pn2/3p4/2PP4/P1PBP3/5PPP/R1BQK1NR b KQ - 0 7 ; Nimzo-Indian Defence ; games=54 ; white_score=0.5278
+rnbq1rk1/p1p2ppp/1p3n2/3p4/1b1P4/2NBPN2/PP3PPP/R1BQ1RK1 b - - 1 8 ; Nimzo-Indian Defence ; games=54 ; white_score=0.6296
+rnbq1rk1/pp3ppp/4pn2/2p5/1bBP4/2N1P2P/PP3PP1/R1BQK1NR w KQ - 0 8 ; Nimzo-Indian Defence ; games=53 ; white_score=0.4528
+rnbq1rk1/ppp2ppp/5n2/3p4/1b1P4/2NBP3/PP2NPPP/R1BQK2R b KQ - 1 7 ; Nimzo-Indian Defence ; games=51 ; white_score=0.5294
+rnbq1rk1/pp3ppp/4pn2/2p5/1bBP4/2N1P3/PPQ2PPP/R1B1K1NR w KQ - 0 8 ; Nimzo-Indian Defence ; games=50 ; white_score=0.5300
+rnbq1rk1/ppp2ppp/4pn2/3p4/1bPP4/2NBP3/PP1B1PPP/R2QK1NR b KQ - 1 6 ; Nimzo-Indian Defence ; games=49 ; white_score=0.5000
+rnbq1rk1/ppp2ppp/5n2/3p4/1b1P4/2NBP3/PP3PPP/R1BQK1NR w KQ - 0 7 ; Nimzo-Indian Defence ; games=44 ; white_score=0.5909
+rnbq1rk1/pp3ppp/4pn2/b1p5/2BP4/P1N1P2P/1P3PP1/R1BQK1NR w KQ - 1 9 ; Nimzo-Indian Defence ; games=43 ; white_score=0.4651
+rnbq1rk1/ppp2ppp/4pn2/3p4/1bPP4/2NBPN2/PP3PPP/R1BQK2R b KQ - 1 6 ; Nimzo-Indian Defence ; games=42 ; white_score=0.6429
+rnbq1rk1/ppp2ppp/3b1n2/3p4/3P4/2NBP3/PP2NPPP/R1BQ1RK1 b - - 3 8 ; Nimzo-Indian Defence ; games=35 ; white_score=0.5857
+rnbqkb1r/ppp2ppp/8/3p4/3Pn3/P4N2/1PP2PPP/RNBQKB1R b KQkq - 0 6 ; Petroff Defence ; games=67 ; white_score=0.5373
+rnbqkb1r/pp3ppp/2p5/1B1p4/3Pn3/5N2/PPP2PPP/RNBQK2R w KQkq - 0 7 ; Petroff Defence ; games=59 ; white_score=0.4746
+rnbqk2r/ppp2ppp/3b4/3p4/3Pn3/2P2N1P/PP2BPP1/RNBQK2R b KQkq - 2 8 ; Petroff Defence ; games=56 ; white_score=0.3929
+rnbqk2r/pp3ppp/2pb4/3p4/2PPn3/5N2/PP2BPPP/RNBQ1RK1 b kq - 1 8 ; Petroff Defence ; games=54 ; white_score=0.4907
+rnbqkb1r/ppp2ppp/8/3p4/3Pn3/5N2/PPP1BPPP/RNBQK2R b KQkq - 1 6 ; Petroff Defence ; games=53 ; white_score=0.5566
+rnbqkb1r/pp3ppp/2p5/3p4/3Pn3/3B1N2/PPP2PPP/RNBQK2R b KQkq - 1 7 ; Petroff Defence ; games=51 ; white_score=0.4706
+rnbq1rk1/ppp2ppp/3b4/3p4/3Pn3/3BBN2/PPP2PPP/RN1Q1RK1 b - - 5 8 ; Petroff Defence ; games=50 ; white_score=0.4800
+rnbqk2r/ppp2ppp/3b4/3p4/3Pn3/2P2N1P/PP3PP1/RNBQKB1R w KQkq - 1 8 ; Petroff Defence ; games=48 ; white_score=0.4688
+rnbqk2r/ppp2ppp/3b4/3p4/3Pn3/2PB1N1P/PP3PP1/RNBQK2R b KQkq - 2 8 ; Petroff Defence ; games=46 ; white_score=0.5652
+rnbqk2r/ppp2ppp/3b4/8/3Pp3/5N2/PPP2PPP/R1BQKB1R w KQkq - 0 8 ; Petroff Defence ; games=46 ; white_score=0.4565
+rnbqkb1r/ppp2ppp/8/3p4/3Pn3/4BN2/PPP2PPP/RN1QKB1R b KQkq - 1 6 ; Petroff Defence ; games=45 ; white_score=0.5222
+rnbqk2r/ppp2ppp/8/3p4/1b1Pn3/2P2N1P/PP3PP1/RNBQKB1R b KQkq - 0 7 ; Petroff Defence ; games=42 ; white_score=0.5119
+rnbqkb1r/ppp2ppp/8/3p4/3Pn3/5N2/PPPN1PPP/R1BQKB1R b KQkq - 1 6 ; Petroff Defence ; games=41 ; white_score=0.5732
+rnbqk2r/ppp2ppp/3b4/3p4/2PPn3/5N2/PP2BPPP/RNBQK2R b KQkq - 0 7 ; Petroff Defence ; games=41 ; white_score=0.5488
+rnbqk2r/ppp2ppp/3b4/3p4/3Pn3/3B1N2/PPPN1PPP/R1BQK2R b KQkq - 3 7 ; Petroff Defence ; games=39 ; white_score=0.5769
+rnbq1rk1/ppp1ppbp/3p1np1/8/3PPB2/2N2N2/PPP1BPPP/R2QK2R b KQ - 5 6 ; Pirc Defence ; games=67 ; white_score=0.4552
+r1bq1rk1/ppp2pbp/2np1np1/P2Pp3/4P3/2N2N2/1PP1BPPP/R1BQK2R b KQ - 0 8 ; Pirc Defence ; games=58 ; white_score=0.4224
+r2q1rk1/pppnppbp/3p1npB/8/3PP1b1/2N2N2/PPPQBPPP/R3K2R b KQ - 9 8 ; Pirc Defence ; games=52 ; white_score=0.5769
+rnbq1rk1/ppp1ppbp/3p1np1/6B1/3PP3/2N2N2/PPP1BPPP/R2QK2R b KQ - 5 6 ; Pirc Defence ; games=49 ; white_score=0.4388
+rnbq1rk1/ppp1ppbp/3p1np1/8/P2PP3/2N2N2/1PP1BPPP/R1BQK2R b KQ - 0 6 ; Pirc Defence ; games=49 ; white_score=0.5306
+rnbq1rk1/ppp1ppbp/3p1np1/8/3PP3/2N2N2/PPP1BPPP/R1BQ1RK1 b - - 5 6 ; Pirc Defence ; games=39 ; white_score=0.5128
+rnbqkb1r/1p3ppp/p3pn2/2p5/2BP4/2N1PN2/PP3PPP/R1BQ1RK1 b kq - 1 7 ; Queen's Gambit Accepted ; games=57 ; white_score=0.5965
+rnbqkb1r/pp3ppp/4pn2/2p5/2BP4/4PN2/PP2QPPP/RNB1K2R b KQkq - 1 6 ; Queen's Gambit Accepted ; games=54 ; white_score=0.4259
+rnbqkb1r/1p3ppp/p3pn2/2p5/2BP4/4PN1P/PP3PP1/RNBQ1RK1 b kq - 1 7 ; Queen's Gambit Accepted ; games=50 ; white_score=0.5500
+rnbqkb1r/5ppp/p3pn2/1pp5/3P4/1BN1PN2/PP3PPP/R1BQ1RK1 b kq - 1 8 ; Queen's Gambit Accepted ; games=48 ; white_score=0.6354
+r1bq1rk1/pppnbpp1/4pn1p/3p4/2PP3B/2N1PN2/PP3PPP/R2QKB1R w KQ - 2 8 ; Queen's Gambit Declined ; games=53 ; white_score=0.4434
+rnb2rk1/ppp1qpp1/4p2p/3p4/2PPn3/2N1PN2/PP3PPP/R2QKB1R w KQ - 0 9 ; Queen's Gambit Declined ; games=51 ; white_score=0.6373
+rn1q1rk1/pbppbppp/1p2pn2/8/2PP4/5NP1/PP2PPBP/RNBQR1K1 b - - 6 7 ; Queen's Indian Defence ; games=60 ; white_score=0.4167
+rn1q1rk1/pbp1bppp/1p1ppn2/8/2PP4/PP3NP1/4PPBP/RNBQ1RK1 b - - 0 8 ; Queen's Indian Defence ; games=59 ; white_score=0.4915
+rn1qk2r/pbppbppp/1p2pn2/8/2PP1B2/5NP1/PP2PPBP/RN1QK2R b KQkq - 4 6 ; Queen's Indian Defence ; games=56 ; white_score=0.6339
+rn1q1rk1/pbppbppp/1p2pn2/8/2PP4/P4NP1/1P2PPBP/RNBQ1RK1 b - - 2 7 ; Queen's Indian Defence ; games=45 ; white_score=0.5000
+rn1qk2r/pbppbppp/1p2pn2/8/2PP4/5NP1/PP2PPBP/RNBQ1RK1 b kq - 4 6 ; Queen's Indian Defence ; games=41 ; white_score=0.5122
+rn1qk2r/pbp1bppp/1p1ppn2/8/2PP1B2/5NP1/PP2PPBP/RN1Q1RK1 b kq - 1 7 ; Queen's Indian Defence ; games=41 ; white_score=0.5000
+rnbqk2r/ppp1bppp/4pn2/3p4/2P5/3P1NP1/PP2PPBP/RNBQK2R b KQkq - 0 5 ; Reti Opening ; games=69 ; white_score=0.5000
+rnbq1rk1/pp2bppp/4pn2/2pp4/2PP4/N4NP1/PP2PPBP/R1BQ1RK1 b - - 1 7 ; Reti Opening ; games=62 ; white_score=0.5161
+rnbqk2r/pp2bppp/4pn2/8/2Pp4/5NP1/PPQP1PBP/RNB1K2R w KQkq - 0 8 ; Reti Opening ; games=60 ; white_score=0.5250
+rnbqk2r/ppp1bppp/4pn2/3p4/2P5/1P3NP1/P2PPPBP/RNBQK2R b KQkq - 0 5 ; Reti Opening ; games=57 ; white_score=0.6579
+rnbq1rk1/pp2bppp/4pn2/2ppN3/2P5/3P2P1/PP2PPBP/RNBQ1RK1 b - - 0 7 ; Reti Opening ; games=54 ; white_score=0.4352
+rnbqk2r/ppp1bppp/4pn2/3p4/2P5/P4NP1/1P1PPPBP/RNBQK2R b KQkq - 0 5 ; Reti Opening ; games=53 ; white_score=0.5283
+rnbq1rk1/ppp1bppp/4pn2/3p4/2P5/N4NP1/PP1PPPBP/R1BQK2R w KQ - 5 6 ; Reti Opening ; games=52 ; white_score=0.4423
+rnbq1rk1/pp2bppp/4pn2/2pp4/2PP4/N4NP1/PP2PPBP/R1BQK2R w KQ - 0 7 ; Reti Opening ; games=51 ; white_score=0.5392
+rnbqk2r/ppp1bppp/4pn2/8/2Pp4/1P3NP1/P2PPPBP/RNBQ1RK1 b kq - 1 6 ; Reti Opening ; games=51 ; white_score=0.4804
+r1bqk2r/pp2bppp/2n1pn2/2p5/2Pp4/1P1P1NP1/P3PPBP/RNBQ1RK1 w kq - 1 8 ; Reti Opening ; games=51 ; white_score=0.4314
+rnbq1rk1/ppp1bppp/4pn2/3p4/2P5/3P1NP1/PP2PPBP/RNBQ1RK1 b - - 2 6 ; Reti Opening ; games=50 ; white_score=0.4200
+rnbq1rk1/ppp1bppp/4pn2/3p4/2P5/P4NP1/1P1PPPBP/RNBQK2R w KQ - 1 6 ; Reti Opening ; games=49 ; white_score=0.4796
+rnbqk2r/ppp1bppp/4pn2/3p4/2P5/5NP1/PPQPPPBP/RNB1K2R b KQkq - 4 5 ; Reti Opening ; games=48 ; white_score=0.3958
+rnbqk2r/ppp1bppp/4pn2/3pN3/2P5/6P1/PP1PPPBP/RNBQK2R b KQkq - 4 5 ; Reti Opening ; games=47 ; white_score=0.5319
+rnbq1rk1/ppp1bppp/4pn2/3p4/2PP4/N4NP1/PP2PPBP/R1BQK2R b KQ - 0 6 ; Reti Opening ; games=47 ; white_score=0.4681
+rnbq1rk1/ppp1bppp/4pn2/3pN3/2P5/6P1/PP1PPPBP/RNBQ1RK1 b - - 6 6 ; Reti Opening ; games=43 ; white_score=0.5000
+rnbqk2r/ppp1bppp/4pn2/8/2Pp4/5NP1/PPQPPPBP/RNB1K2R w KQkq - 0 6 ; Reti Opening ; games=42 ; white_score=0.4524
+rnbqk2r/ppp1bppp/4pn2/8/2Pp4/4PNP1/PPQP1PBP/RNB1K2R b KQkq - 0 6 ; Reti Opening ; games=34 ; white_score=0.4706
+r1bq1rk1/ppp1bppp/2n1pn2/3p4/2P5/1P1P1NP1/P3PPBP/RNBQ1RK1 b - - 0 7 ; Reti Opening ; games=32 ; white_score=0.4688
+r2qk2r/2p1bppp/p1np1n2/1p2p3/4P3/1BN2Q1P/PPPP1PP1/R1B1R1K1 b kq - 0 10 ; Ruy Lopez, Closed ; games=60 ; white_score=0.5917
+r1bq1rk1/2p1bppp/p1np1n2/1p2p3/4P3/PB1P1N2/1PP2PPP/RNBQR1K1 b - - 0 9 ; Ruy Lopez, Closed ; games=56 ; white_score=0.4464
+r2qk2r/2pbbppp/p1np1n2/1p2p3/P3P3/1BP2N2/1P1P1PPP/RNBQR1K1 b kq - 0 9 ; Ruy Lopez, Closed ; games=56 ; white_score=0.4911
+r1bq1rk1/2p1bppp/p2p1n2/np2p3/4P3/1BNP1N1P/PPP2PP1/R1BQR1K1 b - - 0 10 ; Ruy Lopez, Closed ; games=55 ; white_score=0.4000
+r1bq1rk1/2p1bppp/p2p1n2/np2p3/4P3/1B1P1N1P/PPP2PP1/RNBQR1K1 w - - 1 10 ; Ruy Lopez, Closed ; games=54 ; white_score=0.4352
+r1bqk2r/2p1bppp/p1np1n2/1p2p3/4P3/1B1P1N2/PPP2PPP/RNBQR1K1 b kq - 0 8 ; Ruy Lopez, Closed ; games=53 ; white_score=0.4906
+r2q1rk1/2pbbppp/p1np1n2/1p2p3/P2PP3/1BP2N2/1P3PPP/RNBQR1K1 b - - 0 10 ; Ruy Lopez, Closed ; games=51 ; white_score=0.5882
+r2q1rk1/1bp1bppp/p2p1n2/np2p3/4P3/1BNP1N1P/PPP2PP1/R1BQR1K1 w - - 1 11 ; Ruy Lopez, Closed ; games=51 ; white_score=0.4706
+r1bqk2r/2p1bppp/p1np1n2/1p2p3/4P3/1BN2N2/PPPP1PPP/R1BQR1K1 b kq - 1 8 ; Ruy Lopez, Closed ; games=51 ; white_score=0.5588
+r1bqr1k1/2p1bppp/p2p1n2/np2p3/4P3/1B1P1N1P/PPPN1PP1/R1BQR1K1 w - - 3 11 ; Ruy Lopez, Closed ; games=50 ; white_score=0.3900
+r1bq1rk1/2p1bppp/p2p1n2/np2p3/4P3/1BNP1N2/PPP2PPP/R1BQR1K1 w - - 3 10 ; Ruy Lopez, Closed ; games=47 ; white_score=0.5000
+r1bqk2r/2p1bppp/p1np1n2/1p2p3/4P3/1B3N2/PPPPQPPP/RNB1R1K1 b kq - 1 8 ; Ruy Lopez, Closed ; games=47 ; white_score=0.5106
+r1bqk2r/2p1bppp/p1np1n2/1p2p3/4P3/1B3N1P/PPPP1PP1/RNBQR1K1 b kq - 0 8 ; Ruy Lopez, Closed ; games=45 ; white_score=0.4778
+r1bq1rk1/2p1bppp/p1np1n2/3Np3/Pp2P3/1B3N2/1PPP1PPP/R1BQR1K1 b - - 1 10 ; Ruy Lopez, Closed ; games=44 ; white_score=0.5000
+r1bq1rk1/2p1bppp/p2p1n2/np2p3/4P3/1B1P1N1P/PPPN1PP1/R1BQR1K1 b - - 2 10 ; Ruy Lopez, Closed ; games=44 ; white_score=0.4659
+r1bqk2r/2p1bppp/p1np1n2/1p2p3/4P3/PB3N2/1PPP1PPP/RNBQR1K1 b kq - 0 8 ; Ruy Lopez, Closed ; games=44 ; white_score=0.4545
+r1bqk2r/2p1bppp/p2p1n2/np2p3/4P3/1BNP1N2/PPP2PPP/R1BQR1K1 b kq - 2 9 ; Ruy Lopez, Closed ; games=43 ; white_score=0.5000
+r1bqk2r/2p1bppp/p2p1n2/np2p3/4P3/1B1P1N2/PPP2PPP/RNBQR1K1 w kq - 1 9 ; Ruy Lopez, Closed ; games=42 ; white_score=0.5000
+r1bq1rk1/2p1bppp/p2p1n2/np2p3/4P3/P2P1N2/BPP2PPP/RNBQR1K1 b - - 2 10 ; Ruy Lopez, Closed ; games=40 ; white_score=0.6250
+r1bqk2r/pppp1ppp/2n2n2/1B6/1b1NP3/2P5/PP3PPP/RNBQK2R b KQkq - 0 6 ; Scotch Game ; games=69 ; white_score=0.5725
+r1bq1rk1/pppp1ppp/2n2n2/1Bb5/3NP3/2P5/PP3PPP/RNBQ1RK1 w - - 3 8 ; Scotch Game ; games=60 ; white_score=0.4000
+r1bqk2r/pppp1ppp/2n2n2/8/1b1NP3/3Q4/PPPB1PPP/RN2KB1R b KQkq - 4 6 ; Scotch Game ; games=52 ; white_score=0.4808
+r1bqk2r/p1pp1ppp/2p2n2/8/1b2P3/2NB4/PPP2PPP/R1BQK2R b KQkq - 1 7 ; Scotch Game ; games=46 ; white_score=0.5109
+r1bqk2r/pppp1ppp/2n2n2/1Bb5/3NP3/2P5/PP3PPP/RNBQ1RK1 b kq - 2 7 ; Scotch Game ; games=45 ; white_score=0.4444
+r1bqkb1r/ppp2ppp/2n2n2/3p4/3NP3/5P2/PPP3PP/RNBQKB1R w KQkq - 0 6 ; Scotch Game ; games=45 ; white_score=0.4444
+r1bqk2r/pppp1ppp/1bn2n2/8/4P3/1NN2P2/PPP3PP/R1BQKB1R b KQkq - 4 7 ; Scotch Game ; games=34 ; white_score=0.4559
+r1bq1rk1/pp1n1ppp/2pbpn2/3p4/2PP4/1PN1PN2/P3BPPP/R1BQ1RK1 b - - 0 8 ; Semi-Slav Defence ; games=58 ; white_score=0.5259
+r1bqk2r/pp1n1ppp/2pbpn2/3p4/P1PP4/2N1PN2/1P2BPPP/R1BQK2R b KQkq - 2 7 ; Semi-Slav Defence ; games=56 ; white_score=0.5089
+r1bqkb1r/pp1n1ppp/2p1pn2/3p4/2PP4/2N1PN1P/PP3PP1/R1BQKB1R b KQkq - 0 6 ; Semi-Slav Defence ; games=55 ; white_score=0.4364
+r1bqkb1r/pp1n1ppp/2p1pn2/3p4/2PP4/2N1PN2/PPQ2PPP/R1B1KB1R b KQkq - 2 6 ; Semi-Slav Defence ; games=52 ; white_score=0.5385
+r1b1k2r/pp1nqppp/2pbpn2/3p4/P1PP4/2N1PN2/1P2BPPP/R1BQ1RK1 b kq - 4 8 ; Semi-Slav Defence ; games=50 ; white_score=0.4900
+r1bqkb1r/pp1n1ppp/2p1pn2/3p4/2PP4/2N1PN2/PP2BPPP/R1BQK2R b KQkq - 2 6 ; Semi-Slav Defence ; games=42 ; white_score=0.5119
+r1bqk2r/pp1n1ppp/2pbpn2/3p4/2PP4/2N1PN2/PP2BPPP/R1BQ1RK1 b kq - 4 7 ; Semi-Slav Defence ; games=33 ; white_score=0.7121
+rnbqk2r/pp2bppp/3pp3/3nP3/2BP4/5N2/PP3PPP/RNBQK2R w KQkq - 1 8 ; Sicilian Alapin ; games=45 ; white_score=0.4444
+r1bqkb1r/1p2pppp/p1np4/8/4P1n1/1NN5/PPPB1PPP/R2QKB1R b KQkq - 3 8 ; Sicilian Classical ; games=60 ; white_score=0.5667
+r1bqkb1r/pp2pppp/2np1n2/8/4P3/1NN5/PPP2PPP/R1BQKB1R b KQkq - 4 6 ; Sicilian Classical ; games=57 ; white_score=0.5877
+r1bqkb1r/pp2pppp/2np1n2/1B6/3NP3/2N5/PPP2PPP/R1BQK2R b KQkq - 4 6 ; Sicilian Classical ; games=54 ; white_score=0.5463
+r2qkb1r/pp1bpppp/2np1n2/1B4B1/3NP3/2N5/PPP2PPP/R2QK2R b KQkq - 6 7 ; Sicilian Classical ; games=51 ; white_score=0.5098
+r1bqkb1r/pp3ppp/2np1n2/4p3/4P3/1NN2P2/PPP3PP/R1BQKB1R b KQkq - 1 7 ; Sicilian Classical ; games=47 ; white_score=0.4894
+r2qkb1r/pp3ppp/2npbn2/3Np3/4P3/1N3P2/PPP3PP/R1BQKB1R b KQkq - 3 8 ; Sicilian Classical ; games=43 ; white_score=0.6047
+r1bqkb1r/1p2pppp/p1np1n2/6B1/3NP3/2N5/PPPQ1PPP/R3KB1R b KQkq - 1 7 ; Sicilian Classical ; games=41 ; white_score=0.5732
+r1bqkb1r/pp2pppp/2np1n2/8/3NP3/2N2P2/PPP3PP/R1BQKB1R b KQkq - 0 6 ; Sicilian Classical ; games=35 ; white_score=0.5571
+r1bqk2r/1p2ppbp/p1np1np1/2p5/P3P3/2NPB1P1/1PP2PBP/R2QK1NR w KQkq - 0 8 ; Sicilian Closed ; games=58 ; white_score=0.5259
+r1bqk1nr/pp2ppbp/2np2p1/2p5/4P3/2NPB1P1/PPP2PBP/R2QK1NR b KQkq - 1 6 ; Sicilian Closed ; games=58 ; white_score=0.4224
+1rbqk1nr/pp2ppbp/2np2p1/2p5/P3P3/2NP2P1/1PP1NPBP/R1BQK2R b KQk - 0 7 ; Sicilian Closed ; games=57 ; white_score=0.5614
+1rbqk2r/pp2ppbp/2np1np1/2p5/4P3/2NP1NP1/PPP2PBP/R1BQ1RK1 w k - 4 8 ; Sicilian Closed ; games=56 ; white_score=0.4196
+1rbqk2r/pp2ppbp/2np1np1/2p5/P3P3/2NP1NP1/1PP2PBP/R1BQ1RK1 b k - 0 8 ; Sicilian Closed ; games=55 ; white_score=0.4182
+r1bq1rk1/pp2ppbp/2np1np1/2p5/4P2P/2NP2P1/PPP1NPB1/R1BQK2R w KQ - 3 8 ; Sicilian Closed ; games=55 ; white_score=0.4909
+r1bqk2r/pp2ppbp/2np1np1/2p5/4P2P/2NP2P1/PPP2PB1/R1BQK1NR w KQkq - 1 7 ; Sicilian Closed ; games=55 ; white_score=0.4727
+r1bq1rk1/pp2npbp/2np2p1/2p1p3/4P3/P1NP2PP/1PP1NPB1/R1BQK2R w KQ - 3 9 ; Sicilian Closed ; games=54 ; white_score=0.5000
+r1bqk2r/pp2ppbp/2np1np1/2p5/4P2P/2NP2P1/PPP1NPB1/R1BQK2R b KQkq - 2 7 ; Sicilian Closed ; games=53 ; white_score=0.4528
+r1bqk2r/pp2npbp/2np2p1/2p1p3/4P3/P1NP2PP/1PP1NPB1/R1BQK2R b KQkq - 2 8 ; Sicilian Closed ; games=53 ; white_score=0.4434
+r1bqk2r/pp2npbp/2np2p1/2p1p3/4P3/P1NP2PP/1PP2PB1/R1BQK1NR w KQkq - 1 8 ; Sicilian Closed ; games=53 ; white_score=0.5755
+r1bqk1nr/pp2ppbp/2np2p1/2p5/4PP2/2NP2P1/PPP3BP/R1BQK1NR b KQkq - 0 6 ; Sicilian Closed ; games=53 ; white_score=0.4906
+r1bqk1nr/pp2ppbp/2np2p1/2p5/4P2P/2NP2P1/PPP2PB1/R1BQK1NR b KQkq - 0 6 ; Sicilian Closed ; games=52 ; white_score=0.5288
+1rbqk2r/pp2ppbp/2np1np1/2p5/P3P3/2NP2P1/1PP1NPBP/R1BQ1RK1 b k - 2 8 ; Sicilian Closed ; games=52 ; white_score=0.6538
+r1bqk1nr/pp3pbp/2np2p1/2p1p3/4P3/2NP2PP/PPP1NPB1/R1BQK2R b KQkq - 1 7 ; Sicilian Closed ; games=51 ; white_score=0.3824
+1rbqk1nr/pp3pbp/2npp1p1/2p5/4PP2/2NP1NP1/PPP3BP/R1BQK2R w KQk - 2 8 ; Sicilian Closed ; games=50 ; white_score=0.4300
+r1bqk1nr/pp3pbp/2np2p1/2p1p3/4P3/P1NP2PP/1PP2PB1/R1BQK1NR b KQkq - 0 7 ; Sicilian Closed ; games=50 ; white_score=0.3500
+r1bqk2r/pp2ppbp/2np1np1/2p5/4P3/2NP1NP1/PPP2PBP/R1BQ1RK1 b kq - 3 7 ; Sicilian Closed ; games=49 ; white_score=0.5612
+1rbqk1nr/pp3pbp/2npp1p1/2p5/4PP2/2NPBNP1/PPP3BP/R2QK2R b KQk - 3 8 ; Sicilian Closed ; games=49 ; white_score=0.4694
+r1bqk2r/pp2ppbp/2np1np1/2p5/P3P3/2NP1NP1/1PP2PBP/R1BQK2R b KQkq - 0 7 ; Sicilian Closed ; games=49 ; white_score=0.5612
+r1bqk2r/pp2npbp/2npp1p1/2p5/4P3/2NPB1P1/PPP1NPBP/R2QK2R w KQkq - 2 8 ; Sicilian Closed ; games=48 ; white_score=0.5208
+r1bqk2r/pp2ppbp/2np1np1/2p5/4P3/2NP1NP1/PPP2PBP/R1BQK2R w KQkq - 2 7 ; Sicilian Closed ; games=48 ; white_score=0.5938
+r1bqk1nr/pp3pbp/2npp1p1/2p5/4PP2/2NP1NP1/PPP3BP/R1BQK2R b KQkq - 1 7 ; Sicilian Closed ; games=47 ; white_score=0.5319
+r1bqk2r/1p2ppbp/p1np1np1/2pN4/P3P3/3PB1P1/1PP2PBP/R2QK1NR b KQkq - 1 8 ; Sicilian Closed ; games=46 ; white_score=0.5326
+r1bqk2r/pp2npbp/2np2p1/2p1p3/4P3/2NP2PP/PPP1NPB1/R1BQ1RK1 b kq - 3 8 ; Sicilian Closed ; games=46 ; white_score=0.5978
+r1bqk1nr/pp2ppbp/2np2p1/2p5/4P3/2NP1NP1/PPP2PBP/R1BQK2R b KQkq - 1 6 ; Sicilian Closed ; games=43 ; white_score=0.5465
+r1bqk1nr/pp3pbp/2npp1p1/2p5/4PP2/2NP2P1/PPP3BP/R1BQK1NR w KQkq - 0 7 ; Sicilian Closed ; games=42 ; white_score=0.4524
+r1bqk1nr/pp2ppbp/2np2p1/2p5/P3P3/2NP2P1/1PP2PBP/R1BQK1NR b KQkq - 0 6 ; Sicilian Closed ; games=42 ; white_score=0.4881
+r1bqk2r/1p2ppbp/p1np2p1/2pN4/P3P1n1/3PB1P1/1PP2PBP/R2QK1NR w KQkq - 2 9 ; Sicilian Closed ; games=42 ; white_score=0.5357
+r1bqk1nr/pp2ppbp/2np2p1/2p5/4P3/2NP2P1/PPP1NPBP/R1BQK2R b KQkq - 1 6 ; Sicilian Closed ; games=41 ; white_score=0.4024
+r1bqk1nr/pp3pbp/2npp1p1/2p5/4P3/2NPB1P1/PPP1NPBP/R2QK2R b KQkq - 1 7 ; Sicilian Closed ; games=40 ; white_score=0.5000
+r1bqk2r/pp2ppbp/2np1np1/2p5/P3P3/2NPB1P1/1PP2PBP/R2QK1NR b KQkq - 0 7 ; Sicilian Closed ; games=40 ; white_score=0.5375
+r1bq1rk1/pp2ppbp/2np1np1/2p5/4P2P/2NP2P1/PPP1NPB1/R1BQ1RK1 b - - 4 8 ; Sicilian Closed ; games=38 ; white_score=0.4342
+r1bqk2r/pp2npbp/2npp1p1/2p5/4P3/2NPB1P1/PPPQNPBP/R3K2R b KQkq - 3 8 ; Sicilian Closed ; games=38 ; white_score=0.4342
+rnbqkb1r/pp2pp1p/3p1np1/8/3NP3/2N5/PPP1BPPP/R1BQK2R b KQkq - 1 6 ; Sicilian Dragon ; games=50 ; white_score=0.5200
+rnbqk2r/pp2ppbp/3p1np1/8/3NP3/2N1B3/PPP1BPPP/R2QK2R b KQkq - 3 7 ; Sicilian Dragon ; games=47 ; white_score=0.5000
+rnbqk2r/pp2ppbp/3p1np1/8/3NP3/2N1B2P/PPP2PP1/R2QKB1R b KQkq - 2 7 ; Sicilian Dragon ; games=45 ; white_score=0.5333
+rn1qkb1r/pp1bpp1p/3p1np1/8/3NP3/2N5/PPP1BPPP/R1BQK2R b KQkq - 3 7 ; Sicilian Dragon ; games=44 ; white_score=0.6136
+r1bqk2r/pp2ppbp/2np1np1/8/3NP3/2N1B3/PPPQBPPP/R3K2R b KQkq - 5 8 ; Sicilian Dragon ; games=43 ; white_score=0.6047
+rnbq1rk1/pp2ppbp/3p1np1/8/3NP3/2N1B2P/PPPQ1PP1/R3KB1R b KQ - 4 8 ; Sicilian Dragon ; games=41 ; white_score=0.5610
+rnbqkb1r/pp2pp1p/3p1np1/8/3NP3/2N4P/PPP2PP1/R1BQKB1R b KQkq - 0 6 ; Sicilian Dragon ; games=39 ; white_score=0.5897
+rn1qk2r/pp1bppbp/3p1np1/8/3NP3/2N1B3/PPP1BPPP/R2QK2R b KQkq - 5 8 ; Sicilian Dragon ; games=36 ; white_score=0.6111
+rnbqkb1r/1p3ppp/p2p1n2/4p3/4P3/1NN1B3/PPP2PPP/R2QKB1R b KQkq - 1 7 ; Sicilian Najdorf ; games=56 ; white_score=0.5268
+rnbqkb1r/1p2pppp/p2p1n2/8/3NP3/2N1B3/PPP2PPP/R2QKB1R b KQkq - 1 6 ; Sicilian Najdorf ; games=55 ; white_score=0.4545
+rn1qkb1r/1p3ppp/p2pbn2/4p3/4P3/1NN1B2P/PPP2PP1/R2QKB1R b KQkq - 3 8 ; Sicilian Najdorf ; games=54 ; white_score=0.5278
+rnbqkb1r/1p3ppp/p2ppn2/8/4PP2/1NN5/PPP3PP/R1BQKB1R b KQkq - 0 7 ; Sicilian Najdorf ; games=47 ; white_score=0.5000
+rnbqkb1r/1p2pppp/p2p1n2/8/4P3/1NN5/PPP2PPP/R1BQKB1R b KQkq - 1 6 ; Sicilian Najdorf ; games=46 ; white_score=0.4130
+rnbqkb1r/1p3ppp/p2p1n2/4p3/4P3/1NN5/PPP1BPPP/R1BQK2R b KQkq - 1 7 ; Sicilian Najdorf ; games=45 ; white_score=0.5000
+rn1qkb1r/1p3ppp/p2pbn2/4p3/4P3/1NN1B3/PPPQ1PPP/R3KB1R b KQkq - 3 8 ; Sicilian Najdorf ; games=45 ; white_score=0.5444
+rnbqk2r/1p2bppp/p2ppn2/8/4PPP1/1NN5/PPP4P/R1BQKB1R b KQkq - 0 8 ; Sicilian Najdorf ; games=43 ; white_score=0.4884
+rnbqkb1r/1p2pppp/p2p1n2/8/3NP3/2N5/PPP1BPPP/R1BQK2R b KQkq - 1 6 ; Sicilian Najdorf ; games=36 ; white_score=0.5694
+r1bqkb1r/1p3ppp/p1np1n2/4p3/4P3/N1N1B3/PPP2PPP/R2QKB1R b KQkq - 1 8 ; Sicilian Sveshnikov ; games=63 ; white_score=0.5000
+r1bqkb1r/1p3ppp/p1np1n2/4p3/P3P3/N1N5/1PP2PPP/R1BQKB1R b KQkq - 1 8 ; Sicilian Sveshnikov ; games=61 ; white_score=0.4426
+r1bqkb1r/1p3ppp/p1np1n2/4p3/4P3/N1N2P2/PPP3PP/R1BQKB1R b KQkq - 1 8 ; Sicilian Sveshnikov ; games=58 ; white_score=0.4138
+1rbqkb1r/1p3ppp/p1np1n2/4p1B1/4P3/N1N5/PPP2PPP/R2QKB1R b KQk - 3 9 ; Sicilian Sveshnikov ; games=58 ; white_score=0.5776
+r1bqkb1r/pp3ppp/2np4/1N1Pp3/8/8/PPP2PPP/R1BQKB1R b KQkq - 0 8 ; Sicilian Sveshnikov ; games=54 ; white_score=0.5648
+r2qkb1r/pp3ppp/2np1n2/4p3/4P1b1/N1N2P2/PPP3PP/R1BQKB1R b KQkq - 0 8 ; Sicilian Sveshnikov ; games=52 ; white_score=0.4519
+r2qkb1r/pp3ppp/2npbn2/4p3/2B1P3/N1N2P2/PPP3PP/R1BQK2R b KQkq - 2 9 ; Sicilian Sveshnikov ; games=52 ; white_score=0.4327
+r2qkb1r/1p3ppp/p1np1n2/4p3/P3P1b1/N1N5/1PP2PPP/R1BQKB1R w KQkq - 2 9 ; Sicilian Sveshnikov ; games=52 ; white_score=0.4231
+r1bqkb1r/pp3ppp/2np1n2/1N2p3/4P3/2N5/PPP1BPPP/R1BQK2R b KQkq - 1 7 ; Sicilian Sveshnikov ; games=51 ; white_score=0.4118
+r2qkb1r/1p3ppp/p1npbn2/4p3/4P3/N1N2P2/PPP3PP/R1BQKB1R w KQkq - 2 9 ; Sicilian Sveshnikov ; games=51 ; white_score=0.4412
+r2qkb1r/1p3ppp/p1npbn2/4p1B1/4P3/N1N2P2/PPP3PP/R2QKB1R b KQkq - 3 9 ; Sicilian Sveshnikov ; games=46 ; white_score=0.5435
+r1bqkb1r/pp3ppp/2np1n2/4p3/4P3/N1N5/PPP2PPP/R1BQKB1R b KQkq - 1 7 ; Sicilian Sveshnikov ; games=43 ; white_score=0.5116
+r1bqkb1r/pp3ppp/2np1n2/1N2p3/4P3/2N2P2/PPP3PP/R1BQKB1R b KQkq - 0 7 ; Sicilian Sveshnikov ; games=42 ; white_score=0.4524
+r1bqkb1r/pp3ppp/2np1n2/1N2p3/P3P3/2N5/1PP2PPP/R1BQKB1R b KQkq - 0 7 ; Sicilian Sveshnikov ; games=38 ; white_score=0.4737
+r1bqk1nr/pp1p1ppp/1bn1p3/8/4P3/PNN5/1PP2PPP/R1BQKB1R b KQkq - 4 7 ; Sicilian Taimanov ; games=58 ; white_score=0.5259
+r1bqk1nr/pp1p1ppp/2n1p3/2b5/4P3/PN6/1PP2PPP/RNBQKB1R b KQkq - 2 6 ; Sicilian Taimanov ; games=49 ; white_score=0.5000
+r1bqkbnr/pp1p1ppp/2n1p3/8/3NP3/P7/1PP2PPP/RNBQKB1R b KQkq - 0 5 ; Sicilian Taimanov ; games=46 ; white_score=0.5326
+r1bqkb1r/pp3ppp/2nppn2/1N6/2P1P3/2N5/PP3PPP/R1BQKB1R b KQkq - 2 7 ; Sicilian Taimanov ; games=46 ; white_score=0.5978
+r1bqkb1r/pp1p1ppp/2n1pn2/8/3NP3/2NQ4/PPP2PPP/R1B1KB1R b KQkq - 4 6 ; Sicilian Taimanov ; games=44 ; white_score=0.6591
+r1bqkbnr/pp1p1ppp/2n1p3/8/3NP3/6P1/PPP2P1P/RNBQKB1R b KQkq - 0 5 ; Sicilian Taimanov ; games=42 ; white_score=0.5119
+r1bqkbnr/pp1p1ppp/2n1p3/1N6/4P3/8/PPP2PPP/RNBQKB1R b KQkq - 2 5 ; Sicilian Taimanov ; games=42 ; white_score=0.4405
+r1bqkbnr/pp3ppp/2npp3/1N6/2P1P3/8/PP3PPP/RNBQKB1R b KQkq - 0 6 ; Sicilian Taimanov ; games=41 ; white_score=0.5366
+r2qkb1r/pp1n1ppp/2p1pn2/5b2/P1NP4/2N1P3/1P3PPP/R1BQKB1R b KQkq - 0 8 ; Slav Defence ; games=53 ; white_score=0.6132
+rn1qkb1r/pp3ppp/2p1p3/3n1b2/P1BP1B2/2N1PN2/1P3PPP/R2QK2R b KQkq - 0 8 ; Slav Defence ; games=37 ; white_score=0.4459
+r1bqk2r/ppp1bppp/2np1n2/4p3/P1B1P3/3P1N2/1PPN1PPP/R1BQK2R b KQkq - 0 6 ; Two Knights Defence ; games=54 ; white_score=0.5000
+r1bq1rk1/ppp1bppp/2np1n2/4p3/P1B1P3/2PP1N2/1P3PPP/RNBQ1RK1 b - - 0 7 ; Two Knights Defence ; games=54 ; white_score=0.4907
+r1bqk2r/ppppbppp/2n2n2/4p3/2B1P3/2NP1N2/PPP2PPP/R1BQK2R b KQkq - 2 5 ; Two Knights Defence ; games=54 ; white_score=0.4352
+r1bqk2r/ppp1bppp/2n5/3np3/P1B5/3P1N2/1PP2PPP/RNBQ1RK1 b kq - 1 7 ; Two Knights Defence ; games=50 ; white_score=0.4400
+r1bq1rk1/ppp1bppp/2np1n2/4p3/P1B1P3/2NP1N2/1PP2PPP/R1BQ1RK1 b - - 2 7 ; Two Knights Defence ; games=48 ; white_score=0.5417
+r1bqk2r/ppp1bppp/2np1n2/4p3/2B1P3/2PP1N2/PP3PPP/RNBQ1RK1 b kq - 0 6 ; Two Knights Defence ; games=43 ; white_score=0.5465
+r1bqk2r/ppp1bppp/2np1n2/4p3/P1B1P3/2NP1N2/1PP2PPP/R1BQK2R b KQkq - 0 6 ; Two Knights Defence ; games=42 ; white_score=0.5000

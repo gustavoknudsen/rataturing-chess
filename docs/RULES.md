@@ -68,18 +68,26 @@ def get_move(fen: str, time_left_ms: int) -> str: ...
 
 ## 5. Banned / allowed [D][AC][R][S]
 
+Verified against aichessathon.com/docs on 2026-09-11. An earlier version of this file paraphrased a stale reading in which any shipped move table looked prohibited; the wording below is the site's.
+
 Banned:
 - **Third-party engines**: Stockfish, Lc0, Maia, and any wrapper, port or translation of one. Checked after games are played, not only at upload [S].
 - **Native binaries** and compiled extensions (Cython does not work on the platform) [D][S].
 - Obfuscated agents - "what you ship must be source a judge can read" [R].
 - A published/pretrained network, even fine-tuned or re-exported - "any network you ship is one you trained yourself" [AC]; "Starting from a published chess network is not" [R].
-- Tables of engine moves/evaluations for lookup during play - "an engine in another shape" [S].
+- **Tables that answer a MIDDLEGAME position**: "A table that answers a middlegame position is a stored search and counts as an engine." Opening and endgame tables are explicitly allowed; see Allowed below.
 - Network calls, subprocess to external binaries, reading outside agent dir + `/tmp` [S].
 
 Allowed:
 - **Our own pre-existing engine**: "Your moves come from code you wrote" [R] - BTC is Gustavo's own code, so porting it is explicitly within the rules. "A model is not required, a classical search is a full entry" [L].
 - Model weight files `.onnx`, `.safetensors`, `.pt` (self-trained only) [D].
-- Opening books and endgame tablebases; `chess.polyglot` and `chess.syzygy` are in the base image. 3-4-man Syzygy fits in 50 MB; 5-man does not [S].
+- **A table you ship and read during a game may answer the opening or the endgame.** Verbatim from the documentation. "The opening is a position whose move number is 20 or lower." The bound applies to the opening; the endgame allowance is separate and is not move-numbered.
+
+  The matching ban is about WHERE the table answers, not where its data came from: "A table that answers a middlegame position is a stored search and counts as an engine." So a book merged from public game data, a third-party book and our own engine labelling is permitted, provided it only answers inside the allowed scope.
+
+  That bound is not self-enforcing. A Polyglot key is a Zobrist hash and carries no move number, so a position stored at move 5 returns a hit at move 34 by transposition. `btc_book.MAX_BOOK_MOVE = 20`, checked against the referee's own FEN before any file is read, is what keeps us inside the rule. Do not raise it.
+
+  `chess.polyglot` and `chess.syzygy` are in the base image. 3-4-man Syzygy fits in 50 MB; 5-man does not [S].
 - Training data unrestricted, including engine-annotated positions [L].
 
 ## 6. Tournament format & dates [D][R][L]

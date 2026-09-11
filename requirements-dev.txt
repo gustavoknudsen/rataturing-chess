@@ -1,0 +1,11 @@
+# Everything above the engine runtime. Not needed to build or run a
+# submission; only to reproduce the training and book pipelines.
+-r requirements.txt
+
+# NNUE training (training/). GPU build chosen to match your CUDA version; see
+# pytorch.org. Never install this into the engine's own environment: it costs
+# import time and resident memory the 90 s budget cannot spare.
+torch
+
+# Opening book scraper (book/scrape/chessathon_scrape.py) only.
+httpx

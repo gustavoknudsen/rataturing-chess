@@ -1,54 +1,88 @@
 # Rataturing
 
-A chess engine for the AI Chessathon, written in Python and compiled with numba. Two evaluations exist: Rataturing NNUE, which uses a neural network trained from scratch for this entry and is what ships, and Rataturing, which uses a hand-crafted evaluation and runs whenever no network is present.
+A chess engine for the AI Chessathon, written in Python and compiled with numba.
 
-The engine is built on BetterThanCris (BTC), a C++ engine by the same author. The competition bans third-party engines and any wrapper, port or translation of one, and explicitly permits your own work: "Your moves come from code you wrote." BTC is the author's own engine, so building on it is within the rules. The network is trained from scratch, which is also required, since published or pretrained networks are banned. See `docs/RULES.md`.
+Two evaluations exist. **Rataturing NNUE** uses a neural network trained from scratch for this entry, and is what ships. **Rataturing** uses a hand-crafted evaluation and runs whenever no network is present.
 
-## Layout
+## Contents
+
+- [Competition constraints](#competition-constraints)
+- [Repository structure](#repository-structure)
+- [Getting started](#getting-started)
+- [Performance](#performance)
+- [Development method](#development-method)
+- [Further reading](#further-reading)
+
+## Competition constraints
+
+Most of the engine's design follows from these.
+
+| constraint | value |
+|---|---|
+| Time control | 120 s + 0.5 s per move, per side, wall time |
+| Import budget | 90 s before the clock starts; no output in that window is a loss |
+| Submission size | 50 MB unzipped |
+| Hardware | one core |
+| Entry point | `agent.py` at the zip root, exposing `get_move(fen, time_left_ms)` |
+
+**Banned:** third-party engines and any wrapper, port or translation of one; published or pretrained networks; native binaries; obfuscated agents; tables that answer a middlegame position.
+
+**Allowed:** your own prior work, self-trained networks, unrestricted training data, and a shipped table that answers the opening or the endgame, where the opening is a position whose move number is 20 or lower.
+
+Rataturing is built on BetterThanCris, a C++ engine by the same author, which the rules permit: "Your moves come from code you wrote." The network is trained from scratch. The opening book is gated at move 20 in `src/btc_book.py`, checked against the referee's own FEN. Full summary in [`docs/RULES.md`](docs/RULES.md).
+
+## Repository structure
 
     src/          the engine. These 15 files, plus the network and books, are
-                  exactly what ships. The submission zip is flat because the
-                  platform does `import agent` at its root.
+                  exactly what ships. The zip is flat because the platform
+                  does `import agent` at its root.
     tests/        correctness suite, about 20,000 assertions
     tools/        match arena, benchmarks, packaging, tuning, UCI bridge
-    training/     NNUE data pipeline and the notebook that trained the net
-    docs/         design decisions and a summary of the competition rules
+    training/     NNUE data pipeline and the notebook that trained the network
+    book/         opening book pipeline: scrape, expand, label, merge, build
+    docs/         competition rules and design decisions
 
-The network (`src/net.npz`) and the opening books (`src/*.bin`) are not in the repository. They are large, and they live beside the engine because `btc_nnue.find_net()` and `btc_book._path()` both resolve relative to their own module.
+The network (`src/net.npz`) and the books (`src/*.bin`) are not in the repository. They are large, and they sit beside the engine because `btc_nnue.find_net()` and `btc_book._path()` both resolve relative to their own module.
 
-## Build the submission
+## Getting started
 
-    .venv/Scripts/python.exe tools/package.py
+    pip install -r requirements.txt
 
-This validates that every import in a shipped file is available on the platform, writes `submission.zip`, extracts it to a temporary directory, and plays a short game from it. It refuses to produce a zip that does not run.
+Build the submission:
 
-## Run the tests
+    python tools/package.py
 
-    .venv/Scripts/python.exe tests/run_tests.py      core correctness
-    .venv/Scripts/python.exe tests/test_see.py       static exchange evaluation
-    .venv/Scripts/python.exe tests/test_convert.py   endgame conversion
-    .venv/Scripts/python.exe tests/test_draw.py      draw rules
-    .venv/Scripts/python.exe tests/test_book.py      opening book and its gate
+This checks that every import in a shipped file exists on the platform, writes `submission.zip`, extracts it to a temporary directory and plays a short game from it. It refuses to produce a zip that does not run.
+
+Run the tests:
+
+    python tests/run_tests.py       core correctness
+    python tests/test_see.py        static exchange evaluation
+    python tests/test_convert.py    endgame conversion
+    python tests/test_draw.py       draw rules
+    python tests/test_book.py       opening book and its move-20 gate
 
 `tests/test_eval.py` checks hand-crafted evaluation terms and expects the network disabled: run it with `BTC_NNUE=0`.
 
-## Measure a change
+Measure a change:
 
     tools/searchbench.py      nodes to a fixed depth, the screening metric
-    tools/arena_par.py        A/B match with sequential probability ratio test
-    tools/arena_ab.py         single-worker match, for anything clock-related
+    tools/arena_par.py        A/B match with a sequential probability ratio test
+    tools/arena_ab.py         single worker, for anything clock-related
+
+Reproducing the training or book pipelines needs `pip install -r requirements-dev.txt`. Do not install torch into the engine's own environment: it costs import time and resident memory the 90 s budget cannot spare.
 
 ## Performance
 
-About 627,000 nodes per second at depth 11 on the development machine, idle. Two things to know before comparing that against anything else.
+About 627,000 nodes per second at depth 11 on the development machine, idle.
 
-The match machine is a single EPYC 9V74 core and is slower, so expect roughly 1.5x to 2x less there. Separately, the same benchmark on the same build varies by 1.6x between an idle machine and a loaded one, so only compare numbers measured back to back under the same conditions. Node counts at fixed depth are deterministic and do transfer; nodes per second, init time and reachable depth do not.
+Two caveats before comparing that with anything. The match machine is a single EPYC 9V74 core and is slower, so expect roughly 1.5x to 2x less. And the same benchmark on the same build varies by 1.6x between an idle machine and a loaded one. Node counts at a fixed depth are deterministic and do transfer; nodes per second, init time and reachable depth do not.
 
-The network is not the speed bottleneck. Disabling it drops the engine to about 381,000 nodes per second, because the NNUE accumulator is updated incrementally through make/unmake while the hand-crafted evaluation recomputes pawn structure, king safety and mobility at every leaf.
+The network is not the bottleneck. Disabling it drops throughput to about 381,000 nodes per second, because the NNUE accumulator is updated incrementally through make and unmake, while the hand-crafted evaluation recomputes pawn structure, king safety and mobility at every leaf.
 
-## How the engine was developed
+## Development method
 
-The search carries many features behind environment flags, defaulting off. numba folds a module-level constant at compile time, so a disabled feature costs nothing and both arms of a match can be built from one directory, differing only in environment. That is the whole method:
+The search carries many features behind environment flags, defaulting off. numba folds a module-level constant at compile time, so a disabled feature costs nothing and both arms of a match can be built from one directory, differing only in environment.
 
 1. Screen the change for node cost against the current build. This rejects anything the engine cannot afford before any match time is spent.
 2. Implement it behind a flag, default off.
@@ -56,15 +90,15 @@ The search carries many features behind environment flags, defaulting off. numba
 4. Run the test suite.
 5. Run an A/B match, and read the confidence interval rather than the headline.
 
-Two habits earned their place and are worth repeating:
+Two habits earned their place.
 
-**Read the margin, not the verdict.** `test_convert` passes a KBN versus K conversion at anything under 50 moves, so it reported success identically for mate in 15, mate in 18 and mate in 26. Two real regressions were invisible at the gate's own threshold and were caught only by reading the printed mate distance.
+**Read the margin, not the verdict.** `test_convert` passes a KBN versus K conversion at anything under 50 moves, so it reported success identically for mate in 15, mate in 18 and mate in 26. Two real regressions were invisible at the gate's own threshold, and were caught only by reading the printed mate distance.
 
 **A trend inside a match is usually the opening set.** Openings are assigned in order from a fixed list, so the first and second halves of a match are different positions, not the same position measured twice. One change read 58 percent over 43 games and 52.6 percent over 345.
 
-## Constraints worth knowing
+## Further reading
 
-- 90 seconds to import before the clock starts. No output in that window is a loss. Measured cold init is about 56 seconds.
-- 50 MB unzipped. The current submission is 41.9 MB, most of it the network and the two books.
-- One core, 120 seconds per side plus 0.5 seconds per move.
-- No third-party engines, no published or pretrained networks, no native binaries. Training data is unrestricted.
+- [`docs/RULES.md`](docs/RULES.md) - the competition rules, verified against the published documentation
+- [`docs/DESIGN_DECISIONS.md`](docs/DESIGN_DECISIONS.md) - why the engine is built this way, with the measurements behind each choice
+- [`book/README.md`](book/README.md) - the opening book pipeline, including how to obtain its inputs and re-run it
+- [`training/`](training/) - the NNUE data pipeline and the notebook that trained the shipped network
