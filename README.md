@@ -2,16 +2,25 @@
 
 A chess engine for the AI Chessathon, written in Python and compiled with numba.
 
-Two evaluations exist. **Rataturing NNUE** uses a neural network trained from scratch for this entry, and is what ships. **Rataturing** uses a hand-crafted evaluation and runs whenever no network is present.
+Two evaluations exist. **Rataturing NNUE** uses a neural network trained from scratch for this entry, and is what ships. **Rataturing Classic** uses a hand-crafted evaluation and runs whenever no network is present.
 
 ## Contents
 
+- [Play against it](#play-against-it)
 - [Competition constraints](#competition-constraints)
 - [Repository structure](#repository-structure)
 - [Getting started](#getting-started)
 - [Performance](#performance)
 - [Development method](#development-method)
 - [Further reading](#further-reading)
+
+## Play against it
+
+Releases include a UCI executable for Arena, Cute Chess and any other standard GUI, in both evaluations. Point the GUI at the executable and keep the folder intact.
+
+The engine compiles itself with numba when it starts, which takes about a minute. That happens once per session rather than once per game, so only the first game waits. [`uci/README.md`](uci/README.md) explains what was tried to shorten it and why none of it worked.
+
+Build them yourself with `python uci/build.py`. The build takes the engine source out of `submission.zip` rather than out of `src/`, so the released executable is verifiably the engine that competed, with nothing added but a protocol adapter.
 
 ## Competition constraints
 
@@ -37,7 +46,8 @@ Rataturing is built on BetterThanCris, a C engine by the same author, since exte
                   exactly what ships. The zip is flat because the platform
                   does `import agent` at its root.
     tests/        correctness suite, about 20,000 assertions
-    tools/        match arena, benchmarks, packaging, tuning, UCI bridge
+    tools/        match arena, benchmarks, packaging, tuning
+    uci/          UCI adapter and the release build
     training/     NNUE data pipeline and the notebook that trained the network
     book/         opening book pipeline: scrape, expand, label, merge, build
     docs/         competition rules and design decisions
@@ -61,6 +71,7 @@ Run the tests:
     python tests/test_convert.py    endgame conversion
     python tests/test_draw.py       draw rules
     python tests/test_book.py       opening book and its move-20 gate
+    python tests/test_uci.py        UCI protocol, 22 checks
 
 `tests/test_eval.py` checks hand-crafted evaluation terms and expects the network disabled: run it with `BTC_NNUE=0`.
 

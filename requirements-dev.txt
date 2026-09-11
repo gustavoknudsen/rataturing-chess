@@ -9,3 +9,8 @@ torch
 
 # Opening book scraper (book/scrape/chessathon_scrape.py) only.
 httpx
+
+# UCI release build (uci/build.py) only. Freezes the protocol adapter into an
+# executable; the engine itself ships beside it as ordinary .py files, so
+# nothing here affects what the engine runs.
+pyinstaller

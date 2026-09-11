@@ -63,3 +63,9 @@ book/data/*
 !book/data/labels_d30.tsv
 !book/data/hedge_tolabel.txt
 !book/data/round1.txt
+
+# UCI release build output: staging trees, frozen executables and the
+# archives. All of it is reproducible from submission.zip by uci/build.py,
+# and the archives are attached to a GitHub release rather than committed.
+release/
+*.spec
