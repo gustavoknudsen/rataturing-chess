@@ -135,14 +135,6 @@ The search carries many features behind environment flags, defaulting off. numba
 4. Run the test suite.
 5. Run an A/B match, and read the confidence interval rather than the headline.
 
-Three habits earned their place.
-
-**Read the margin, not the verdict.** `test_convert` passes a KBN versus K conversion at anything under 50 moves, so it reported success identically for mate in 15, mate in 18 and mate in 26. Two real regressions were invisible at the gate's own threshold, and were caught only by reading the printed mate distance.
-
-**A trend inside a match is usually the opening set.** Openings are assigned in order from a fixed list, so the first and second halves of a match are different positions, not the same position measured twice. One change read 58 percent over 43 games and 52.6 percent over 345.
-
-**Measure the platform, do not infer it.** The per-move overhead was inferred at 420 ms from a rated floor and reserved for two weeks; the platform's clock lines, once printed, measured it at 1 to 2 ms. The engine had been finishing lost games with a minute unused.
-
 ## Further reading
 
 - [`docs/FINALS_DAY.md`](docs/FINALS_DAY.md) - the 30 s constraint, the staged wrapper, and everything that changed on the day
