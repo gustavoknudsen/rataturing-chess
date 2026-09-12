@@ -1,14 +1,15 @@
 # Rataturing
 
-A chess engine for the AI Chessathon, written in Python and compiled with numba. **Finished 5th of 334 entrants** in the qualification Swiss and reached the London final.
+A chess engine for the AI Chessathon 2026, written in Python and compiled with numba. **5th of 334 entrants** in the qualification Swiss, then **5th to 8th** in the London finals knockout, where it lost the quarter-final 1.5 to 2.5 to the eventual winner.
 
-Two evaluations exist. **Rataturing NNUE** uses a neural network trained from scratch for this entry, and is what ships. **Rataturing Classic** uses a hand-crafted evaluation and runs whenever no network is present.
+Two evaluations exist. **Rataturing NNUE** uses a neural network trained from scratch for this entry, and is what competed. **Rataturing Classic** uses a hand-crafted evaluation and runs whenever no network is present.
 
 ## Contents
 
 - [Competition result](#competition-result)
 - [Play against it](#play-against-it)
 - [Competition constraints](#competition-constraints)
+- [How it works](#how-it-works)
 - [Repository structure](#repository-structure)
 - [Getting started](#getting-started)
 - [Performance](#performance)
@@ -17,22 +18,23 @@ Two evaluations exist. **Rataturing NNUE** uses a neural network trained from sc
 
 ## Competition result
 
-| | |
-|---|---|
-| Placing | **5th of 334** |
-| Score | 10.0 / 13 |
-| Record | 8 wins, 4 draws, 1 loss |
-| Rating | 2853 |
-| Tiebreak | Buchholz 113.5 |
-| Outcome | qualified for the London final, a knockout among the top 50 |
+| stage | format | result |
+|---|---|---|
+| Qualification Swiss, 11 September | 13 rounds, 334 entrants, locked builds | **5th**, 10.0 / 13, 8 wins 4 draws 1 loss, rating 2853 |
+| London finals knockout, 12 September | single elimination, four games per round | **5th to 8th**, lost the quarter-final 1.5 to 2.5 to AlphaFish, who won the event |
 
-Qualification was a 13-round Swiss played over locked builds, so every entrant submitted once and the same binary played all thirteen games. Half a point separated this entry from first place, and only the Buchholz tiebreak separated it from third and fourth. [Leaderboard](https://aichessathon.com/leaderboard?stage=finalset).
+Half a point separated this entry from first place in the Swiss, and only the Buchholz tiebreak from third and fourth. The final began with a surprise constraint: the init budget was cut from 90 s to 30 s at 10:30, with builds locked at 14:00. How that was answered is in [`docs/FINALS_DAY.md`](docs/FINALS_DAY.md). Leaderboards: [Swiss](https://aichessathon.com/leaderboard?stage=finalset), [knockout](https://aichessathon.com/leaderboard?stage=knockout).
 
-Every entrant ran on the same fixed platform under the same limits, listed in [Competition constraints](#competition-constraints) below. Most of this engine's design follows from them.
+Every entrant ran on the same fixed platform under the same limits, listed in [Competition constraints](#competition-constraints). Most of the engine's design follows from them.
 
 ## Play against it
 
-Releases include a UCI executable for Arena, Cute Chess and any other standard GUI, in both evaluations. Point the GUI at the executable and keep the folder intact.
+Releases include a UCI executable for Arena, Cute Chess and any other standard GUI. Point the GUI at the executable and keep the folder intact.
+
+| release | engine | contents |
+|---|---|---|
+| **1.0** | the build that played the qualification Swiss | NNUE and Classic executables |
+| **1.1** | the build that played the London final | NNUE executable, plus the submission zip exactly as uploaded |
 
 The engine compiles itself with numba when it starts, which takes about a minute. That happens once per session rather than once per game, so only the first game waits. [`uci/README.md`](uci/README.md) explains what was tried to shorten it and why none of it worked.
 
@@ -40,35 +42,47 @@ Build them yourself with `python uci/build.py`. The build takes the engine sourc
 
 ## Competition constraints
 
-Most of the engine's design follows from these.
-
 | constraint | value |
 |---|---|
 | Time control | 120 s + 0.5 s per move, per side, wall time |
-| Import budget | 90 s before the clock starts; no output in that window is a loss |
+| Init budget | 90 s in the qualifier, **30 s in the final**; no output in that window is a loss |
 | Submission size | 50 MB unzipped |
-| Hardware | one core |
+| Hardware | one core, 2 GB, no network, scratch space wiped between games |
 | Entry point | `agent.py` at the zip root, exposing `get_move(fen, time_left_ms)` |
+| Process model | one process per game, frozen whenever it is not our move |
 
 **Banned:** third-party engines and any wrapper, port or translation of one; published or pretrained networks; native binaries; obfuscated agents; tables that answer a middlegame position.
 
 **Allowed:** your own prior work, self-trained networks, unrestricted training data, and a shipped table that answers the opening or the endgame, where the opening is a position whose move number is 20 or lower.
 
-Rataturing is built on BetterThanCris, a C engine by the same author, since extended with C++ files and utilities, which the rules permit: "Your moves come from code you wrote." The network is trained from scratch. The opening book is gated at move 20 in `src/btc_book.py`, checked against the referee's own FEN. Full summary in [`docs/RULES.md`](docs/RULES.md).
+Rataturing is built on BetterThanCris, a C engine by the same author, since extended with C++ files and utilities, which the rules permit: "Your moves come from code you wrote." The network is trained from scratch. The opening books are gated at move 20 in `src/btc_book.py`, checked against the referee's own FEN. Full summary in [`docs/RULES.md`](docs/RULES.md).
+
+## How it works
+
+**Search.** Bitboard move generation with magic sliders, make/unmake, iterative deepening with aspiration windows, and a negamax with transposition table, null move, late move reductions, late move pruning, futility and reverse futility, SEE pruning, singular extensions with multicut, ProbCut, internal iterative reductions, and main, capture, continuation and correction histories. numba cannot compile mutual recursion, so the whole main search is one function.
+
+**Evaluation.** A king-bucketed NNUE: 32 king buckets by 768 features into a 512-wide layer, 8 output buckets keyed on piece count, quantised to int16. The accumulator is updated incrementally through make and unmake. Trained from scratch on public engine-labelled data; the training pipeline and notebook are in `training/`.
+
+**Opening books.** Three Polyglot files: one built on finals day from the positions the tournament had actually used, one built before the qualifier from the published curated starts, and a hedge for the standard start. All three are gap-filled from public data and labelled by this engine.
+
+**The final's staged wrapper.** The engine's numba compile takes about 40 s on the platform against a 30 s budget. `staged/agent_staged.py` starts the compile on a thread, spends 26 s of the init window waiting for it, and pays the rest from the clock on move one, where the book usually answers. It is what shipped for the knockout.
+
+**Time management.** Budget per move from the clock and an assumed number of moves remaining; both constants were recalibrated from the platform's own clock lines on finals day.
 
 ## Repository structure
 
-    src/          the engine. These 15 files, plus the network and books, are
-                  exactly what ships. The zip is flat because the platform
-                  does `import agent` at its root.
+    src/          the engine. These 16 files, the network, the attack tables
+                  and the books are exactly what ships. The zip is flat because
+                  the platform does `import agent` at its root.
+    staged/       the wrapper that met the 30 s init budget, and its build
     tests/        correctness suite, about 20,000 assertions
-    tools/        match arena, benchmarks, packaging, tuning
+    tools/        match arena, benchmarks, packaging, tuning, clock simulator
     uci/          UCI adapter and the release build
     training/     NNUE data pipeline and the notebook that trained the network
     book/         opening book pipeline: scrape, expand, label, merge, build
-    docs/         competition rules and design decisions
+    docs/         rules, design decisions, the finals-day record, research notes
 
-The network (`src/net.npz`, 24 MB) and the two opening books (`src/*.bin`, 16 MB) are included, so a clone runs the engine that actually competed. They sit beside the engine rather than in a data directory because `btc_nnue.find_net()` and `btc_book._path()` both resolve relative to their own module, and the submission zip is flat.
+The network (`src/net.npz`, 24 MB) and the three opening books (`src/*.bin`, 24 MB) are included, so a clone runs the engine that actually competed. They sit beside the engine rather than in a data directory because `btc_nnue.find_net()` and `btc_book._path()` both resolve relative to their own module, and the submission zip is flat.
 
 ## Getting started
 
@@ -76,40 +90,40 @@ The network (`src/net.npz`, 24 MB) and the two opening books (`src/*.bin`, 16 MB
 
 Build the submission:
 
-    python tools/package.py
+    python tools/package.py           the flat engine zip, played from a temp dir before it is accepted
+    python staged/build.py --zip      the finals layout on top of it
 
-This checks that every import in a shipped file exists on the platform, writes `submission.zip`, extracts it to a temporary directory and plays a short game from it. It refuses to produce a zip that does not run.
+The first checks that every import in a shipped file exists on the platform, writes `submission.zip`, extracts it and plays a short game from it. The second renames the engine to `agent_real.py`, adds the wrapper and the fallback, and refuses to continue unless every engine file hashes equal to the archive.
 
 Run the tests:
 
-    python tests/run_tests.py       core correctness
-    python tests/test_see.py        static exchange evaluation
-    python tests/test_convert.py    endgame conversion
-    python tests/test_draw.py       draw rules
-    python tests/test_book.py       opening book and its move-20 gate
-    python tests/test_uci.py        UCI protocol, 22 checks
+    python tests/run_tests.py         core correctness, perft
+    python tests/test_search.py       search against a reference implementation
+    python tests/test_accumulator.py  incremental NNUE accumulator equals a full refresh
+    python tests/test_book.py         opening books and their move-20 gate
+    python tests/test_staged.py       the staged wrapper: deadline, handover, fallback
+    python tests/test_uci.py          UCI protocol
 
-`tests/test_eval.py` checks hand-crafted evaluation terms and expects the network disabled: run it with `BTC_NNUE=0`.
+`tests/test_eval.py` checks hand-crafted evaluation terms and expects the network disabled: run it with `BTC_NNUE=0`. `tests/test_nnue.py` needs the training data set and is not runnable from a clone.
 
 Measure a change:
 
     tools/searchbench.py      nodes to a fixed depth, the screening metric
     tools/arena_par.py        A/B match with a sequential probability ratio test
     tools/arena_ab.py         single worker, for anything clock-related
+    tools/tc_tune.py          the clock budget simulated over whole games
 
-Reproducing the training or book pipelines needs `pip install -r requirements-dev.txt`. Do not install torch into the engine's own environment: it costs import time and resident memory the 90 s budget cannot spare.
+Reproducing the training or book pipelines needs `pip install -r requirements-dev.txt`. Do not install torch into the engine's own environment: it costs import time and resident memory.
 
 ## Performance
 
-About 650,000 nodes per second at depth 11 on the development machine, idle:
+About 470,000 nodes per second at depth 9 on the development machine and about 450,000 on the platform's core, from the match logs. Treat local figures as a reading of one machine on one day: the same command on the same build varies by more than a third with load and core placement, and only figures measured back to back under the same conditions compare.
 
-    python tools/searchbench.py 11 3
+Node counts at a fixed depth do not have that problem. `python tools/searchbench.py 9` prints a total that is deterministic across runs and machines, so it identifies the search exactly. For the shipped engine it reads **268059**, and every change that is meant to be pure speed has to leave it untouched. It is the cheapest gate in the project and the one that caught the most.
 
-Treat that as a reading of this machine on that day, not a property of the engine. The match hardware is a single EPYC 9V74 core and is slower. More importantly, the same command on the same build varies by well over a third with machine load: repeated runs here have given anywhere from 490,000 to 650,000. Only compare figures measured back to back under the same conditions.
+Three speed changes verified that way on finals day did not ship for lack of match time and are in `src/btc_search.py` behind flags that default off: the static evaluation cached in the transposition table, the accumulator built lazily in the child, and pick-best-and-shift move selection. Each has its measurements beside its flag, and the shipped path is unchanged when they are off.
 
-Node counts at a fixed depth do not have that problem. They are deterministic, reproduce exactly across runs and machines, and are what the screening step in the development method below actually uses.
-
-The network is not the bottleneck. Disabling it *lowers* throughput, to about 437,000 nodes per second, because the NNUE accumulator is updated incrementally through make and unmake while the hand-crafted evaluation recomputes pawn structure, king safety and mobility at every leaf. The size of that gap moves with load; its direction has held in every measurement.
+The network is not the bottleneck. Disabling it lowers throughput, because the NNUE accumulator is updated incrementally while the hand-crafted evaluation recomputes pawn structure, king safety and mobility at every leaf.
 
 ## Development method
 
@@ -121,15 +135,20 @@ The search carries many features behind environment flags, defaulting off. numba
 4. Run the test suite.
 5. Run an A/B match, and read the confidence interval rather than the headline.
 
-Two habits earned their place.
+Three habits earned their place.
 
 **Read the margin, not the verdict.** `test_convert` passes a KBN versus K conversion at anything under 50 moves, so it reported success identically for mate in 15, mate in 18 and mate in 26. Two real regressions were invisible at the gate's own threshold, and were caught only by reading the printed mate distance.
 
 **A trend inside a match is usually the opening set.** Openings are assigned in order from a fixed list, so the first and second halves of a match are different positions, not the same position measured twice. One change read 58 percent over 43 games and 52.6 percent over 345.
 
+**Measure the platform, do not infer it.** The per-move overhead was inferred at 420 ms from a rated floor and reserved for two weeks; the platform's clock lines, once printed, measured it at 1 to 2 ms. The engine had been finishing lost games with a minute unused.
+
 ## Further reading
 
-- [`docs/RULES.md`](docs/RULES.md) - the competition rules, verified against the published documentation
+- [`docs/FINALS_DAY.md`](docs/FINALS_DAY.md) - the 30 s constraint, the staged wrapper, and everything that changed on the day
 - [`docs/DESIGN_DECISIONS.md`](docs/DESIGN_DECISIONS.md) - why the engine is built this way, with the measurements behind each choice
+- [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) - how the engine, the network and the book were made and tested
+- [`docs/RULES.md`](docs/RULES.md) - the competition rules, verified against the published documentation
+- [`docs/research/`](docs/research/) - the port audit, the search and speed research, and what was learned training the networks
 - [`book/README.md`](book/README.md) - the opening book pipeline, including how to obtain its inputs and re-run it
 - [`training/`](training/) - the NNUE data pipeline and the notebook that trained the shipped network

@@ -15,6 +15,12 @@ one: on a bare K+P vs K+P position the port scored +1068 where BTC scores +611.
 import numpy as np
 from numba import njit, uint64
 
+# Jit-only helpers. Suppressing the Python-callable wrappers cuts compile
+# time, but calling one of these from Python then crashes the process, so a
+# function gets this only once every call site is known to be jitted.
+_NOWRAP = {"no_cpython_wrapper": True, "no_cfunc_wrapper": True}
+
+
 from btc_core import (
     B, BLACK, K, KING_ATTACKS, N, OCC_B, OCC_W, ONE, P, Q, SIDE, WHITE, ZERO,
     count_bits, lsb,
@@ -43,7 +49,7 @@ KINGSIDE = uint64(int(FILE_MASK[4]) | int(FILE_MASK[5])
                   | int(FILE_MASK[6]) | int(FILE_MASK[7]))
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _msb(bbv):
     """Index of the most significant set bit. Caller guarantees bbv != 0."""
     sq = 0
@@ -54,12 +60,12 @@ def _msb(bbv):
     return sq
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _square_colour(sq):
     return (sq & 1) ^ ((sq >> 3) & 1)
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _chebyshev(a, b):
     dr = RANK_OF[a] - RANK_OF[b]
     df = FILE_OF[a] - FILE_OF[b]
@@ -70,7 +76,7 @@ def _chebyshev(a, b):
     return dr if dr > df else df
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _pawns_and_kings(bb, strong):
     weak = 1 - strong
     s_pawns = bb[P] if strong == WHITE else bb[P + 6]
@@ -80,7 +86,7 @@ def _pawns_and_kings(bb, strong):
     return s_pawns, w_pawns, s_king, w_king
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _scale_pawns_vs_bare_king(s_pawns, w_king, weak):
     """K and pawns vs lone K: all pawns on one rook file with the weak king in
     front of them is a draw."""
@@ -91,7 +97,7 @@ def _scale_pawns_vs_bare_king(s_pawns, w_king, weak):
     return -1
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _scale_bishop_pawns(bb, strong, s_pawns, w_pawns, s_king, w_king,
                         npm_weak, s_pawn_count, w_pawn_count):
     """KB and pawns vs K: wrong rook pawn with the wrong-coloured bishop, and
@@ -121,7 +127,7 @@ def _scale_bishop_pawns(bb, strong, s_pawns, w_pawns, s_king, w_king,
     return -1
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _scale_bishop_pawn_vs_bishop(bb, strong, weak, s_pawns, w_king):
     """KBP vs KB: king blockading on the wrong colour, or opposite bishops."""
     sp_sq = lsb(s_pawns)
@@ -138,7 +144,7 @@ def _scale_bishop_pawn_vs_bishop(bb, strong, weak, s_pawns, w_king):
     return -1
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _scale_bishop_pawn_vs_knight(bb, strong, s_pawns, w_king):
     """KBP vs KN: king blockading the pawn on the wrong colour."""
     sp_sq = lsb(s_pawns)
@@ -151,7 +157,7 @@ def _scale_bishop_pawn_vs_knight(bb, strong, s_pawns, w_king):
     return -1
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _scale_pawn_vs_pawn(bb, st, strong, s_pawns, s_king, w_king):
     """KP vs KP: ignore the weak pawn and probe the bitbase. A position that is
     already drawn without the weak pawn stays drawn with it."""
@@ -165,7 +171,7 @@ def _scale_pawn_vs_pawn(bb, st, strong, s_pawns, s_king, w_king):
     return 0
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _specialized_scale(bb, st, strong):
     """Scale factor for exactly drawn or strongly drawish material, or -1 when
     no specialised rule applies."""
@@ -201,7 +207,7 @@ def _specialized_scale(bb, st, strong):
     return -1
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _opposite_bishop_scale(bb, strong, s_pawns, w_pawns, npm_white, npm_black):
     if npm_white == BISHOP_V and npm_black == BISHOP_V:
         passed = 0
@@ -217,7 +223,7 @@ def _opposite_bishop_scale(bb, strong, s_pawns, w_pawns, npm_white, npm_black):
     return 22 + 3 * count_bits(strong_occ)
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _generic_scale(bb, strong, weak, s_pawns, w_pawns, npm_white, npm_black,
                    s_count):
     """Opposite bishops, single-flank rook endings and queen-vs-pieces."""
@@ -258,13 +264,13 @@ def _generic_scale(bb, strong, weak, s_pawns, w_pawns, npm_white, npm_black,
     return sf - 4 * one_flank
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _weak_king_touches_pawn(bb, weak, w_pawns):
     w_king = lsb(bb[K]) if weak == WHITE else lsb(bb[K + 6])
     return (KING_ATTACKS[w_king] & w_pawns) != ZERO
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def endgame_scale(bb, st, score):
     """Scale factor in [0, 64] for the side the score favours."""
     strong = WHITE if score > 0 else BLACK

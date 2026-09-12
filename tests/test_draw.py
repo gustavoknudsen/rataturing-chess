@@ -167,18 +167,21 @@ def test_tt_mate_downgrade():
 
     mate_in = 30
     score = se.MATE_VALUE - mate_in
-    se.tt_record(bb, score, 20, se.HASH_EXACT, 0, 0, tt_key, tt_data, 1, 0)
+    se.tt_record(bb, score, 20, se.HASH_EXACT, 0, 0, tt_key, tt_data, 1, 0,
+                 se.TT_NO_EVAL)
 
-    low, _, _ = se.tt_probe(bb, -se.INFINITY, se.INFINITY, 1, 0, tt_key, tt_data, 0)
+    low, _, _, _ = se.tt_probe(bb, -se.INFINITY, se.INFINITY, 1, 0, tt_key,
+                               tt_data, 0)
     check("fifty=0, mate returned", low, score)
 
     # 100 - 60 = 40 half-moves left, more than the 30 the mate needs.
-    ok, _, _ = se.tt_probe(bb, -se.INFINITY, se.INFINITY, 1, 0, tt_key, tt_data, 60)
+    ok, _, _, _ = se.tt_probe(bb, -se.INFINITY, se.INFINITY, 1, 0, tt_key,
+                              tt_data, 60)
     check("fifty=60, still reachable so still returned", ok, score)
 
     # 100 - 80 = 20 half-moves left, fewer than the 30 needed.
-    high, _, _ = se.tt_probe(bb, -se.INFINITY, se.INFINITY, 1, 0, tt_key, tt_data,
-                             80)
+    high, _, _, _ = se.tt_probe(bb, -se.INFINITY, se.INFINITY, 1, 0, tt_key,
+                                tt_data, 80)
     check("fifty=80, cutoff withheld" if FIX else "fifty=80, unfixed returns it",
           high, se.NO_HASH_ENTRY if FIX else score)
 

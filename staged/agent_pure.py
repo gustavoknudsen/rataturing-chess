@@ -1,9 +1,10 @@
 """Fallback agent: python-chess only. No numba, no numpy, no network.
 
-Ship this AS agent.py, instead of the real engine, when a constraint makes the
-real engine impossible. Three separate constraints have no other answer:
+In the finals build it ships beside the real engine and answers only while the
+engine is still compiling. On its own it is the last resort for constraints
+the real engine cannot meet at all:
 
-    init budget <= 10 s    numba compiles for 31 s and cannot be hurried
+    init budget <= 10 s    the numba compile takes about 40 s on the platform
     memory cap <= 256 MB   numba's own runtime is ~320 MB before our first array
     numpy removed          every bitboard in the engine is np.uint64
 

@@ -63,6 +63,11 @@ class ParallelSearch:
 
     def __init__(self, requested=THREADS, tt_entries=None):
         self.threads = threads_allowed(requested)
+        # Whether a second thread may run at all, which is a different
+        # question from how many search threads were asked for: pondering
+        # wants one background thread beside a single-threaded search, and it
+        # is governed by the same reference counting rule.
+        self.threads_possible = not getattr(btc_nrt, "_APPLIED", False)
         self.main = search.SearchState(tt_entries or search.TT_ENTRIES)
         self.helpers = []
         for _ in range(self.threads - 1):
@@ -201,3 +206,66 @@ def search_position(par, bb, st, rep_keys, rep_count, soft_ms, hard_ms,
     for helper in par.helpers:
         nodes += int(helper.sc[search.SC_NODES])
     return move, score, depth, nodes
+
+
+class Ponderer:
+    """Keep searching the position we expect next, into the shared table.
+
+    Off unless BTC_PONDER=1, and worthless under the tournament rules, which
+    say both agents run on the same machine and take the core in turns: there
+    is no CPU to think with while the opponent thinks. It exists for the case
+    where that condition is the one that changes, because then it is worth
+    far more than parallel search is. Pondering roughly doubles thinking time,
+    against the 32 percent that turning BTC_NRT off costs.
+
+    Deliberately not UCI-style ponderhit. There is no predicted-move
+    bookkeeping and no committing to a line: the thread simply searches the
+    predicted position and everything it proves lands in the shared table. A
+    correct prediction means the next real search starts with a warm table; a
+    wrong one means some table entries for a position that did not occur,
+    which is what a transposition table is already full of. Nothing downstream
+    has to know whether the guess was right, which removes the entire class of
+    bugs that ponderhit handling usually brings.
+    """
+
+    def __init__(self, par):
+        self.par = par
+        self.state = None
+        self.thread = None
+        if par.threads_possible:
+            self.state = search.SearchState(_STUB_TT)
+            self.state.tt_key = par.main.tt_key
+            self.state.tt_data = par.main.tt_data
+
+    def start(self, bb, st, rep_keys, rep_count, generation):
+        """Begin pondering a position. Safe to call when disabled."""
+        if self.state is None or self.thread is not None:
+            return
+        history = max(int(rep_count) - 1, 0)
+        rep_base = min(history, 1024)
+        # No deadline: the thread runs until stop() is called, which happens
+        # before the next real search. A deadline would only make it stop
+        # early and waste the opponent's clock.
+        _prep_helper(self.state, generation, rep_keys, rep_base, history,
+                     search.time.perf_counter() + 3600.0)
+        self.thread = threading.Thread(
+            target=_helper_loop,
+            args=(self.state, bb, st, rep_base, search.MAX_SEARCH_PLY, 0),
+            daemon=True)
+        self.thread.start()
+
+    def stop(self):
+        """Stop pondering. Must complete before any real search begins."""
+        if self.thread is None:
+            return
+        _stop(self.state)
+        self.thread.join(timeout=1.0)
+        alive = self.thread.is_alive()
+        self.thread = None
+        if alive:
+            # Same rule as a stuck helper: never hand a live thread's state
+            # back to a second thread. Give up pondering for the rest of the
+            # game rather than risk two threads on one accumulator.
+            print("parallel: ponder thread did not stop, pondering off",
+                  flush=True)
+            self.state = None

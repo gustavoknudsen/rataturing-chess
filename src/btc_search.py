@@ -28,15 +28,22 @@ import time
 import numpy as np
 from numba import int64, njit, objmode, uint64
 
+# Jit-only helpers. Suppressing the Python-callable wrappers cuts compile
+# time, but calling one of these from Python then crashes the process, so a
+# function gets this only once every call site is known to be jitted.
+_NOWRAP = {"no_cpython_wrapper": True, "no_cfunc_wrapper": True}
+
+
 from btc_core import (
-    B, EP, EP_KEYS, FIFTY, HASH, K, MAX_PLY, N, NO_SQ, OCC_A, ONE, P, Q, R,
-    SIDE, SIDE_KEY, WHITE, ZERO, count_bits, generate_captures,
+    B, EP, EP_KEYS, FIFTY, HASH, K, MAX_PLY, N, NO_SQ, OCC_A, OCC_W, ONE, P,
+    Q, R, SIDE, SIDE_KEY, WHITE, ZERO, count_bits, generate_captures,
     generate_moves, is_under_attack, k, legal_moves, lsb, make_move, p,
     see_ge, unmake,
 )
 from btc_endgame import SPECIALISED_MAX_PIECES
 from btc_eval import evaluate as full_evaluate
 from btc_eval import evaluate_cached as full_evaluate_cached
+from btc_eval import _material_only
 from btc_eval import (NET_BUCKETS, NET_FT_B, NET_FT_W, NET_L1,
                       NET_TABLE, USE_NNUE)
 from btc_nnue import refresh as refresh_acc
@@ -89,17 +96,10 @@ USE_QS_EVASION = not MINIMAL and _flag("BTC_QS_EVASION")
 # Draw-rule corrections, Four draw-rule corrections. Default ON: shipped
 # in batch 2 (24W 52D 13L over 89 games, 56.2%).
 USE_DRAW_FIX = not MINIMAL and _flag("BTC_DRAW_FIX")
-# A second occurrence against game history is not a draw -
-# on its own flag, and OFF even when the rest of the group is on.
-#
-# It is correct by the rules and it measured *negative*: over 72 games it raised
-# the threefold share 6.4 points and dropped the win share 6.2 against the same
-# build without it. Scoring the second occurrence as a draw is wrong, but it
-# also makes the engine refuse to repeat, and that refusal is worth more than
-# the correctness. Engines that score repetitions correctly pair it with a
-# contempt term so a drawn line is worth slightly less than zero; without that,
-# fixing this alone only teaches the engine that walking toward a threefold is
-# safe. Do not enable it until there is a draw-score offset to go with it.
+# Score a second occurrence against game history as a draw. Correct by the
+# rules and measured negative (72 games: threefold share +6.4 points, wins
+# -6.2), because without a contempt term it teaches the engine that walking
+# into a repetition is safe. Off until a draw-score offset exists.
 USE_DRAW_HIST = not MINIMAL and os.environ.get("BTC_DRAW_HIST") == "1"
 USE_NULL_ZUGZWANG_GUARD = not MINIMAL and _flag("BTC_NULL_ZUGZWANG")
 # Static-eval gate on the null move (only try to prove a fail-high when the
@@ -111,16 +111,9 @@ USE_NULL_ZUGZWANG_GUARD = not MINIMAL and _flag("BTC_NULL_ZUGZWANG")
 # benefit here to weigh against a lost half point, so it stays off.
 USE_NULL_EVAL_GATE = not MINIMAL and os.environ.get("BTC_NULL_EVAL_GATE") == "1"
 # Adaptive null-move reduction, R = 3 + depth/3 + min((eval-beta)/200, 3),
-# against BTC's flat R = 2.
-#
-# **ON, and the story is a lesson about the harness rather than the feature.**
-# At a 3 s clock it measured -33 elo [-68, +1] over 400 games and was switched
-# off. That was an artefact: a 3 s *clock* is 45 ms per *move* (the budget
-# divides by MTG), which searches about depth 6, and at depth 6 this formula
-# gives R = 5, so `depth - 1 - R` = 0 and the null search collapses straight
-# into quiescence - it proves nothing and prunes on nothing. Re-run at 30 s,
-# far closer to the tournament control: +27 elo [-22, +76] over 197 games.
-# Two positive results and a mechanism explaining the negative one.
+# against BTC's flat R = 2. On: +27 elo [-22, +76] over 197 games at 30 s. An
+# earlier -33 at a 3 s clock was a harness artefact: 45 ms moves search depth
+# 6, where R = 5 collapses the null search straight into quiescence.
 USE_NULL_ADAPTIVE = not MINIMAL and _flag("BTC_NULL_ADAPTIVE")
 # Cut-node awareness. Default OFF until measured in games: the 300-game A/B of
 # this session's other search work came back at -29 elo despite a 31.6% node
@@ -162,21 +155,11 @@ USE_PROBCUT_FULL = not MINIMAL and os.environ.get("BTC_PROBCUT_FULL") == "1"
 # good from bad the attacker is noise.
 USE_CAP_SCORE_V2 = not MINIMAL and _flag("BTC_CAP_SCORE_V2")
 USE_CAP_SEE_DYN = not MINIMAL and os.environ.get("BTC_CAP_SEE_DYN") == "1"
-# Give the null-move child at least one ply of real search. Without it
-# the reduction can exceed the depth remaining and the child is entered
-# at a negative depth, where five separate margins invert their sign:
-# RFP's `RFP_MARGIN * (depth - improving)` becomes a BONUS, futility's
-# does too, and LMP, _history_bonus and _update_correction are all
-# quadratic or depth-scaled and treat depth -5 like depth +5. It also
-# ends the _tt_pack corruption at its source: a negative depth sets
-# every bit above 42, so the entry reads back as depth 127 and becomes
-# permanently unreplaceable. Null move is the ONLY producer of negative
-# depths - every other call site is floored or gated.
-#
-# Measured over searchbench at depth 9: corrupt entries 953 -> 0,
-# occupancy 133,928 -> 166,023, KBN vs K mate 18 -> mate 15.
-# Preferred over BTC_DEPTH_CLAMP, which fixes the same family
-# downstream but costs nine moves of conversion (mate 18 -> 27).
+# Give the null-move child at least one ply of real search. A negative depth
+# inverts the sign of every depth-scaled margin (RFP, futility, LMP, history
+# bonus, correction) and packs into the table as depth 127, an entry nothing
+# can replace. Null move is the only producer of negative depths. Measured at
+# depth 9: corrupt entries 953 -> 0, KBN vs K mate 18 -> mate 15.
 USE_NULL_CD_FLOOR = not MINIMAL and _flag("BTC_NULL_CD_FLOOR")
 USE_TT_KEEP_MOVE = not MINIMAL and os.environ.get("BTC_TT_KEEP_MOVE") == "1"
 USE_ASP_V2 = not MINIMAL and os.environ.get("BTC_ASP_V2") == "1"
@@ -215,52 +198,26 @@ USE_DEPTH_CLAMP = not MINIMAL and os.environ.get("BTC_DEPTH_CLAMP") == "1"
 # Same negative-depth pathology: floor the depth feeding the history
 # bonus. Separate flag so a grouped result stays bisectable.
 USE_HIST_DEPTH_FLOOR = not MINIMAL and os.environ.get("BTC_HIST_DEPTH_FLOOR") == "1"
-# Correction history. Default ON, and matched: +113 =85 -102 over 300 games,
-# 51.8%, +13 elo [-27, +52]. It cuts the static
-# evaluation's mean absolute prediction error over the benchmark from 562.9
-# to 458.9, an 18.5% improvement.
-#
-# The old note here said it costs 20.9% more nodes. That is stale: measured
-# at depth 11, shipping is 899,621 nodes against 982,968 with BTC_CORRHIST=0,
-# so turning it OFF now costs 9.3%. The continuation plane changed the
-# economics. Do not spend a match slot re-testing this.
+# Correction history. On: +13 elo [-27, +52] over 300 games, and it cuts the
+# static evaluation's mean absolute error on the benchmark by 18.5 percent.
+# Turning it off costs 9.3 percent more nodes at depth 11.
 USE_CORR_HIST = not MINIMAL and _flag("BTC_CORRHIST")
-# History pruning of quiets. Default OFF: measured at nothing, and the reason
-# is structural rather than a bad threshold. It is redundant with LMP as
-# configured here - at depth <= 4 LMP already admits only (3 + depth^2)/2
-# quiets, which is fewer than history pruning would reach. Margin 1024*depth
-# pruned 3 nodes out of 943,275; scanning 512/256/128/64 moved node counts
-# non-monotonically (938,967 / 975,001 / 939,584 / 1,042,289), which is the
-# signature of a heuristic doing nothing but perturbing move order. Worth
-# revisiting only if LMP is retuned to admit more moves.
+# History pruning of quiets. Off: redundant with LMP as configured, which
+# already admits fewer quiets at depth <= 4 than this would prune. Margin
+# 1024 * depth pruned 3 nodes in 943,275. Revisit only if LMP is loosened.
 USE_HIST_PRUNE = not MINIMAL and os.environ.get("BTC_HISTPRUNE") == "1"
 # Disable the centipawn-margin pruning rules (RFP, razoring, futility) where
-# the evaluation is a mating drive score rather than material.
-#
-# **Default OFF: principled, and measurably worse.** The unit mismatch is real -
-# it is the same one that broke KBN vs K with delta pruning and KR vs K with
-# correction history - but unlike those two it breaks nothing here, and guarding
-# it costs depth: KBN vs K converts in 18 moves unguarded against 22 guarded.
-# The reason the theory does not bite is that the specialised drive score is
-# monotonic in closeness to mate, so an RFP cutoff on it prunes nodes that are
-# genuinely hopeless for the defender rather than misjudging material. Depth is
-# worth more than the tidier invariant. Kept behind a flag because the argument
-# is close and the constants it interacts with are being retuned.
+# the evaluation is a mating drive rather than material. Off: the unit
+# mismatch is real but harmless here, because the drive score is monotonic
+# in closeness to mate, and guarding it costs depth (KBN vs K in 22 moves
+# against 18).
 USE_EVAL_SCALE_GUARD = not MINIMAL and os.environ.get("BTC_EVAL_SCALE_GUARD") == "1"
 CORR_DIAG = os.environ.get("BTC_CORR_DIAG") == "1"
-# Depth-scaled SEE pruning in the main move loop. BTC uses SEE for ordering
-# and for quiescence pruning but never here.
-#
-# Default OFF: it works, but it is exactly free. At thresholds 20/10 it cuts
-# nodes to depth 11 by 7.2% (630,690 against 679,560) and the wall time is
-# unchanged, because see_ge costs what the pruned nodes saved. Two reasons
-# specific to this engine: our SEE is a swap-off loop in numba, expensive
-# relative to a node, and _sort_moves already runs see_ge on every capture to
-# split good from bad, so pruning recomputes it. Reusing that result would
-# make capture pruning nearly free and is the way to revisit this.
-# Pushing harder backfires: 5/5 at depth<=12 raised nodes to 782,359.
-# Read the move and its score through row views hoisted out of the move
-# loops rather than indexing the 2-D arrays per move.
+# Depth-scaled SEE pruning in the main move loop. Off: at thresholds 20/10 it
+# cuts nodes to depth 11 by 7.2 percent and wall time not at all, because
+# see_ge here is a swap-off loop that costs what the pruned nodes saved and
+# _sort_moves has already run it on every capture. _see_prunable reuses that
+# result instead.
 USE_ROWVIEW = os.environ.get("BTC_ROWVIEW", "1") == "1"
 # Unrolled plane scan in _captured_piece.
 USE_CAP_UNROLL = os.environ.get("BTC_CAP_UNROLL", "1") == "1"
@@ -268,17 +225,9 @@ USE_CAP_UNROLL = os.environ.get("BTC_CAP_UNROLL", "1") == "1"
 # pruned never pays for one.
 USE_LAZY_ACC = os.environ.get("BTC_LAZY_ACC", "1") == "1"
 USE_SEE_PRUNE = not MINIMAL and _flag("BTC_SEEPRUNE")
-# Singular extensions default OFF. On its own it is fine, and it measured
-# +20 elo over 120 games (interval -42 to +84, so no evidence of gain). But
-# combined with RFP_MARGIN=130 it breaks KBN vs K conversion: both prune or
-# extend more aggressively and together they cut the mating line
-# (test_convert.py, threefold repetition after 17 moves). RFP=130 has real
-# evidence behind it (+67, interval excluding zero), singular did not at
-# the time. Singular was later re-enabled and is ON by default below;
-# BTC_SINGULAR=0 disables it.
-# Certified at +52 elo [+1, +105] over 176 games, 57.4%, as a same-binary
-# A/B. Default ON via _flag; BTC_SINGULAR=0 disables. The material_scale
-# gate inside the block is what makes it safe - see there.
+# Singular extensions. On: +52 elo [+1, +105] over 176 games as a same-binary
+# A/B. Combined with RFP_MARGIN=130 it once broke KBN vs K conversion; the
+# material_scale gate inside the block is what makes it safe now.
 USE_SINGULAR = not MINIMAL and _flag("BTC_SINGULAR")
 # Multi-cut off the back of the singular verification. Requires singular,
 # because it reuses that search.
@@ -289,7 +238,44 @@ USE_MULTICUT = USE_SINGULAR \
 # table is otherwise cleared once per search. Published at 5.77 +-3.92, which
 # is small enough that only a match settles it, so this is OFF until one does.
 USE_KILLER_CLEAR = os.environ.get("BTC_KILLER_CLEAR") == "1"
+# Lazy stand-pat in quiescence: skip the network when material alone clears
+# beta by a margin. Rejected on measurement: nodes at depth 9 rise from
+# 259,210 (off) to 264,873 at margin 400 and 399,067 at margin 75. Quiescence
+# here is fail-soft, and a lazy cutoff can only return beta, which throws away
+# the information fail-soft exists to keep; the tree grows to recover it.
+USE_LAZY_QS = not MINIMAL and os.environ.get("BTC_LAZY_QS") == "1"
+# How far material has to clear beta before the network is skipped. Material
+# ignores every positional term and every correction, so this has to cover the
+# largest plausible disagreement, not the typical one.
+LAZY_QS_MARGIN = _tune("BTC_LAZY_QS_MARGIN", 400)
 USE_FULL_EVAL = _flag("BTC_EVAL")
+# Three speed features from the last day of the competition, all tree-identical
+# by fingerprint and all off, because none had a match before uploads closed.
+#
+# A fourth, handing the parent's in-check result to the child, is deliberately
+# absent: it needs another negamax argument, numba marshals that argument even
+# when the flag prunes its only use, and that cost 3 percent on the shipped
+# path with the flag off (pinned, best of six interleaved rounds).
+#
+# Cache the raw static evaluation in the low 16 bits of the transposition key,
+# so a node that finds its entry skips the network forward pass, about half of
+# node time. The bucket index still comes from the real hash's low bits, so
+# the key compare only needs the top 48. Fingerprint with the flag on: 268059
+# at depth 9, 712734 at depth 11. With BTC_CHILD_ACC and a new opening book it
+# scored 47.8 percent +- 6.9 over 200 games at 10 s + 0.04 s: not
+# distinguishable from zero. Needs a match that separates it from the book.
+USE_TT_EVAL = os.environ.get("BTC_TT_EVAL") == "1"
+# Build the NNUE accumulator row in the child after its own TT probe, rather
+# than in the parent after make_move, so a child that cuts off or repeats never
+# pays for the delta. Fingerprint on: 268059 / 712734. Shares the 200-game
+# result above and needs its own match.
+USE_CHILD_ACC = os.environ.get("BTC_CHILD_ACC") == "1"
+# Stable partial move selection: take the first maximum of the untried moves
+# and shift, once per move actually tried, instead of sorting the whole list.
+# First maximum plus shift reproduces the insertion sort's order exactly, so
+# the fingerprint holds: 268059 / 712734. Off: timing on the day was too noisy
+# to measure; needs a clean nps reading and a match.
+USE_PICK_MOVES = os.environ.get("BTC_PICK_MOVES") == "1"
 
 INFINITY = 50000
 MATE_VALUE = 49000
@@ -500,7 +486,7 @@ MVV_LVA = np.array([
 ] * 2, dtype=np.int64)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def c_div(a, b):
     """C integer division: truncation toward zero. Requires b > 0."""
     q = a // b
@@ -509,13 +495,13 @@ def c_div(a, b):
     return q
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def interpolate(opening_value, endgame_value, stage_score):
     return c_div(opening_value * stage_score
                  + endgame_value * (OPENING_PHASE - stage_score), OPENING_PHASE)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def game_stage_score(bb):
     score = 0
     for pc in range(N, Q + 1):
@@ -523,14 +509,14 @@ def game_stage_score(bb):
     return score
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _material_term(pc, stage, stage_score):
     if stage == 2:
         return interpolate(MATERIAL_MG[pc], MATERIAL_EG[pc], stage_score)
     return MATERIAL_MG[pc] if stage == 0 else MATERIAL_EG[pc]
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _pst_term(pc, sq, stage, stage_score):
     if stage == 2:
         return interpolate(PIECE_TABLES[0, pc, sq], PIECE_TABLES[1, pc, sq],
@@ -538,7 +524,7 @@ def _pst_term(pc, sq, stage, stage_score):
     return PIECE_TABLES[stage, pc, sq]
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _evaluate_psqt(bb, st):
     """Material + piece-square tables + tempo. Kept as the BTC_EVAL=0 fallback
     so the full evaluation can be A/B tested against it."""
@@ -566,7 +552,7 @@ def _evaluate_psqt(bb, st):
     return score if st[SIDE] == WHITE else -score
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def evaluate(bb, st):
     if USE_FULL_EVAL:
         return full_evaluate(bb, st)
@@ -582,7 +568,7 @@ def evaluate(bb, st):
 ACC_REFRESH = os.environ.get("BTC_ACC_REFRESH") == "1"
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def evaluate_cached(bb, st, acc_row):
     """Evaluation reading the accumulator the move loop already maintains."""
     if not USE_FULL_EVAL:
@@ -592,7 +578,7 @@ def evaluate_cached(bb, st, acc_row):
     return full_evaluate_cached(bb, st, acc_row)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _tt_pack(move, score, depth, flag, age, pv):
     v = uint64(move & 0xFFFFFF)
     v |= uint64(score + SCORE_BIAS) << uint64(24)
@@ -607,46 +593,87 @@ def _tt_pack(move, score, depth, flag, age, pv):
 # int64() casts are load-bearing: numba's int(uint64) stays uint64, and a
 # later int64/uint64 branch unification silently promotes to float64
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _tt_move(data):
     return int64(data & uint64(0xFFFFFF))
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _tt_score(data):
     return int64((data >> uint64(24)) & uint64(0x3FFFF)) - SCORE_BIAS
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _tt_depth(data):
     return int64((data >> uint64(42)) & uint64(0x7F))
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _tt_flag(data):
     return int64((data >> uint64(49)) & uint64(0x3))
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _tt_pv(data):
     return int64((data >> uint64(59)) & uint64(1))
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _tt_age(data):
     return int64((data >> uint64(51)) & uint64(0xFF))
 
 
+# Under USE_TT_EVAL the low 16 bits of tt_key carry this position's raw static
+# evaluation. Field 0 means "no evaluation": in-check nodes compute none, and
+# the specialised endgames return a mating drive far outside int16. Biasing by
+# 32768 keeps every cacheable value (|eval| <= TT_EVAL_MAX) clear of 0.
+TT_NO_EVAL = -32768
+TT_EVAL_BIAS = 32768
+TT_EVAL_MAX = 32000
+
+
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
+def _tt_key_eq(stored, key):
+    """Same position? With the evaluation field packed in, the top 48 bits
+    only; a slot's bucket already fixes the low ones."""
+    if not USE_TT_EVAL:
+        return stored == key
+    return (stored ^ key) >> uint64(16) == uint64(0)
+
+
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
+def _tt_key_eval(stored):
+    if not USE_TT_EVAL:
+        return int64(TT_NO_EVAL)
+    field = int64(stored & uint64(0xFFFF))
+    if field == 0:
+        return int64(TT_NO_EVAL)
+    return field - int64(TT_EVAL_BIAS)
+
+
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
+def _tt_key_pack(key, raw):
+    """Key with the evaluation field set, or left 0 when out of range."""
+    if not USE_TT_EVAL:
+        return key
+    v = key & uint64(0xFFFFFFFFFFFF0000)
+    if raw >= -TT_EVAL_MAX and raw <= TT_EVAL_MAX:
+        v |= uint64(raw + TT_EVAL_BIAS)
+    return v
+
+
 @njit(cache=False, fastmath=True, error_model='numpy')
 def tt_probe(bb, alpha, beta, depth, ply, tt_key, tt_data, fifty):
-    """Returns (cutoff score or NO_HASH_ENTRY, tt move or 0, pv bit)."""
+    """Returns (cutoff score or NO_HASH_ENTRY, tt move or 0, pv bit, stored raw
+    evaluation or TT_NO_EVAL)."""
     if not USE_TT:
-        return NO_HASH_ENTRY, 0, int64(0)
+        return NO_HASH_ENTRY, 0, int64(0), int64(TT_NO_EVAL)
     key = bb[HASH]
     base = int64(key & uint64(tt_key.shape[0] // 4 - 1)) * 4
     for i in range(4):
-        if tt_key[base + i] != key:
+        if not _tt_key_eq(tt_key[base + i], key):
             continue
+        raw = _tt_key_eval(tt_key[base + i])
         data = tt_data[base + i]
         move = _tt_move(data)
         pv = _tt_pv(data)
@@ -662,27 +689,27 @@ def tt_probe(bb, alpha, beta, depth, ply, tt_key, tt_data, fifty):
         # withheld and the node searches instead.
         if USE_DRAW_FIX and score > MATE_SCORE \
                 and MATE_VALUE - score > 100 - fifty:
-            return NO_HASH_ENTRY, move, pv
+            return NO_HASH_ENTRY, move, pv, raw
         if USE_DRAW_FIX and score < -MATE_SCORE \
                 and MATE_VALUE + score > 100 - fifty:
-            return NO_HASH_ENTRY, move, pv
+            return NO_HASH_ENTRY, move, pv, raw
         if _tt_depth(data) >= depth:
             flag = _tt_flag(data)
             if flag == HASH_EXACT:
-                return score, move, pv
+                return score, move, pv, raw
             # Fail-soft: hand back the stored score, not the window edge.
             # A node that proved +300 against a beta of +50 is recorded as
             # +50 under fail-hard, so every later probe of that position
             # inherits a bound 250 centipawns worse than what was proven.
             if flag == HASH_ALPHA and score <= alpha:
-                return score, move, pv
+                return score, move, pv, raw
             if flag == HASH_BETA and score >= beta:
-                return score, move, pv
-        return NO_HASH_ENTRY, move, pv
-    return NO_HASH_ENTRY, 0, int64(0)
+                return score, move, pv, raw
+        return NO_HASH_ENTRY, move, pv, raw
+    return NO_HASH_ENTRY, 0, int64(0), int64(TT_NO_EVAL)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def tt_peek(bb, ply, tt_key, tt_data):
     """Raw entry for this position: (hit, depth, flag, ply-adjusted score).
     Singular extensions need the stored bound even when it was too shallow to
@@ -690,7 +717,7 @@ def tt_peek(bb, ply, tt_key, tt_data):
     key = bb[HASH]
     base = int64(key & uint64(tt_key.shape[0] // 4 - 1)) * 4
     for i in range(4):
-        if tt_key[base + i] != key:
+        if not _tt_key_eq(tt_key[base + i], key):
             continue
         data = tt_data[base + i]
         score = _tt_score(data)
@@ -703,7 +730,12 @@ def tt_peek(bb, ply, tt_key, tt_data):
 
 
 @njit(cache=False, fastmath=True, error_model='numpy')
-def tt_record(bb, score, depth, flag, move, ply, tt_key, tt_data, gen, pv):
+def tt_record(bb, score, depth, flag, move, ply, tt_key, tt_data, gen, pv,
+              raw):
+    """`raw` is this node's static evaluation, or TT_NO_EVAL when it computed
+    none; it is read only under USE_TT_EVAL. An entry that already holds one
+    keeps it rather than losing it to a later store from an in-check or
+    out-of-range node."""
     if not USE_TT:
         return
     key = bb[HASH]
@@ -713,7 +745,7 @@ def tt_record(bb, score, depth, flag, move, ply, tt_key, tt_data, gen, pv):
     replace_value = 1 << 30
     for i in range(4):
         idx = base + i
-        if tt_key[idx] == key or tt_key[idx] == ZERO:
+        if _tt_key_eq(tt_key[idx], key) or tt_key[idx] == ZERO:
             slot = idx
             break
         value = _tt_depth(tt_data[idx]) - 8 * ((gen - _tt_age(tt_data[idx])) & 0xFF)
@@ -722,7 +754,12 @@ def tt_record(bb, score, depth, flag, move, ply, tt_key, tt_data, gen, pv):
             replace = idx
     if slot < 0:
         slot = replace
-    if USE_LMR_TTPV and tt_key[slot] == key and _tt_pv(tt_data[slot]):
+    same = _tt_key_eq(tt_key[slot], key)
+    new_key = _tt_key_pack(key, raw)
+    if USE_TT_EVAL and same and (new_key & uint64(0xFFFF)) == uint64(0):
+        # This store has no evaluation to offer; the entry already there does.
+        new_key |= tt_key[slot] & uint64(0xFFFF)
+    if USE_LMR_TTPV and same and _tt_pv(tt_data[slot]):
         # Sticky: once a position has been seen on the
         # principal variation the bit survives every later rewrite of the
         # same entry, including quiescence's, which has no pv notion of its
@@ -730,49 +767,37 @@ def tt_record(bb, score, depth, flag, move, ply, tt_key, tt_data, gen, pv):
         pv = int64(1)
     # depth-preferred: keep a deeper same-key entry unless exact or close;
     # still refresh its move and age (search.cpp recordHash)
-    if tt_key[slot] == key and flag != HASH_EXACT and depth < _tt_depth(tt_data[slot]) - 3:
+    if same and flag != HASH_EXACT and depth < _tt_depth(tt_data[slot]) - 3:
         old = tt_data[slot]
         kept_move = move if move else _tt_move(old)
         tt_data[slot] = _tt_pack(kept_move, _tt_score(old), _tt_depth(old),
                                  _tt_flag(old), gen, pv)
+        if USE_TT_EVAL:
+            # Same top 48 bits as what is already there, so this claims nothing
+            # new; it only fills in an evaluation field the entry was missing.
+            tt_key[slot] = new_key
         return
     if score < -MATE_SCORE:
         score -= ply
     if score > MATE_SCORE:
         score += ply
     if USE_DEPTH_CLAMP and depth < 0:
-        # Discard. _tt_pack shifts depth into an unsigned field, so a
-        # negative value sets every bit above 42 and the entry reads back
-        # as depth 127 with a corrupt flag, which a depth-preferred policy
-        # can never replace.
-        #
-        # This must return BEFORE tt_key[slot] is written. Stamping the key
-        # and then skipping the data leaves the slot claiming this position
-        # while holding the previous occupant's entry, and on an empty slot
-        # that reads back as flag 0 - HASH_EXACT - with score -SCORE_BIAS,
-        # which tt_probe will cut on. Worse than the corrupt entry it
-        # replaces, which was at least inert.
-        #
-        # Storing at depth 0 instead is also wrong: a depth-0 entry is one
-        # quiescence can cut on, which flattens the mating drive and loses
-        # KBN vs K.
-        #
-        # Not an airtight guarantee: _node_prologue adds a ply when in
-        # check, after the gate in _prologue_head has already tested the
-        # incoming depth, so a node entered at depth -1 while in check
-        # still records at depth 0. That is unchanged from the flag being
-        # off, so it is not a regression, but the rule is not absolute.
+        # Discard. A negative depth packs as depth 127 with a corrupt flag,
+        # which a depth-preferred policy can never replace. Return before
+        # tt_key is written: a stamped key over the previous occupant's data
+        # reads back as an exact entry tt_probe will cut on. Storing at depth
+        # 0 is also wrong: quiescence can cut on it and KBN vs K is lost.
         return
-    if USE_TT_KEEP_MOVE and move == 0 and tt_key[slot] == key:
+    if USE_TT_KEEP_MOVE and move == 0 and same:
         # Same position, and this store has no move to offer. Keeping the
         # one already there costs nothing and preserves the ordering and
         # singular-extension guidance a deeper search paid for.
         move = _tt_move(tt_data[slot])
-    tt_key[slot] = key
+    tt_key[slot] = new_key
     tt_data[slot] = _tt_pack(move, score, depth, flag, gen, pv)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _update_history(hist, piece, tgt, bonus):
     if bonus > HIST_MAX:
         bonus = HIST_MAX
@@ -783,7 +808,7 @@ def _update_history(hist, piece, tgt, bonus):
     hist[piece, tgt] = e
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _history_bonus(depth):
     if USE_HIST_DEPTH_FLOOR and depth < 0:
         # The formula is quadratic, so a negative depth earns a bonus as
@@ -799,13 +824,13 @@ def _history_bonus(depth):
     return bonus
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _pawn_corr_index(bb):
     key = bb[P] * uint64(0x9E3779B97F4A7C15) + bb[P + 6] * uint64(0xC2B2AE3D27D4EB4F)
     return int64((key >> uint64(32)) & uint64(CORR_MASK))
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _white_corr_index(bb):
     key = (bb[N] * uint64(0x9E3779B97F4A7C15) + bb[B] * uint64(0xC2B2AE3D27D4EB4F)
            + bb[R] * uint64(0x165667B19E3779F9) + bb[Q] * uint64(0xD6E8FEB86659FD93)
@@ -813,7 +838,7 @@ def _white_corr_index(bb):
     return int64((key >> uint64(32)) & uint64(CORR_MASK))
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _black_corr_index(bb):
     key = (bb[N + 6] * uint64(0x9E3779B97F4A7C15)
            + bb[B + 6] * uint64(0xC2B2AE3D27D4EB4F)
@@ -823,7 +848,7 @@ def _black_corr_index(bb):
     return int64((key >> uint64(32)) & uint64(CORR_MASK))
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _minor_corr_index(bb):
     key = (bb[N] * uint64(0x9E3779B97F4A7C15)
            + bb[B] * uint64(0xC2B2AE3D27D4EB4F)
@@ -832,7 +857,7 @@ def _minor_corr_index(bb):
     return int64((key >> uint64(32)) & uint64(CORR_MASK))
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _cont_corr_index(played, ply):
     """Index for the moves 2 and 4 plies back, or -1 when neither exists.
 
@@ -856,7 +881,7 @@ def _cont_corr_index(played, ply):
     return int64((key >> uint64(32)) & uint64(CORR_MASK))
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _cont_corr_delta(corr, played, ply, side):
     """Continuation-plane contribution, already divided by CORR_NORM.
 
@@ -871,7 +896,7 @@ def _cont_corr_delta(corr, played, ply, side):
     return c_div(CORR_WEIGHT_CONT * int64(corr[4, idx, side]), CORR_NORM)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _corrected_eval(bb, st, corr, ev):
     """Static evaluation nudged by what past searches at this pawn structure
     and piece configuration actually returned.
@@ -905,7 +930,7 @@ def _corrected_eval(bb, st, corr, ev):
     return value
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _corr_gravity(old, bonus):
     """History gravity: the closer an entry is to the bound, the less a new
     observation moves it, so one outlier cannot dominate the evaluation."""
@@ -916,7 +941,7 @@ def _corr_gravity(old, bonus):
     return old + bonus - c_div(old * abs(bonus), CORR_LIMIT)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _update_correction(bb, st, corr, corrected, best_score, depth,
                        has_best_move, sc, played, ply):
     """Fold this node's static-eval error into the correction tables. The
@@ -953,7 +978,7 @@ def _update_correction(bb, st, corr, corrected, best_score, depth,
                 int64(corr[4, cont_i, side]), bonus)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _captured_piece(bb, st, mv):
     if mv & (1 << 22):
         return p if st[SIDE] == WHITE else P
@@ -980,7 +1005,7 @@ def _captured_piece(bb, st, mv):
     return start
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _capture_score(bb, st, mv, cap_hist):
     """Good captures (SEE >= 0) sort above quiets, bad captures below them."""
     if USE_EVASION_ORDER and not (mv & (1 << 20)):
@@ -1007,17 +1032,10 @@ def _capture_score(bb, st, mv, cap_hist):
         return SCORE_GOOD_CAPTURE + base
     threshold = int64(0)
     if USE_CAP_SEE_DYN:
-        # The threshold must divide the whole ordering score, not the history
-        # alone: `see_ge(m, -score / 18)` with `score = 7 * value(captured)
-        # + capture history`. Using the history by itself lets a negative
-        # history push the threshold POSITIVE, and see_ge then short-circuits
-        # every promotion and en-passant capture to "bad" and rejects a free
-        # pawn before running the exchange loop. Here the good/bad bit gates
-        # the quiescence break and _see_prunable, so both drop the move
-        # outright - a soundness bug rather than an ordering wobble.
-        #
-        # Clamped at zero as well, so no tuning of CAP_VALUE_MULT or
-        # CAP_SEE_DIV can bring the positive branch back.
+        # The threshold divides the whole ordering score, not the history
+        # alone: a negative history could push it positive, and see_ge then
+        # rejects every promotion and en passant capture outright. Clamped at
+        # zero so no tuning of the two constants can bring that back.
         threshold = -c_div(CAP_VALUE[captured] * CAP_VALUE_MULT + hist,
                            CAP_SEE_DIV)
         if threshold > 0:
@@ -1027,7 +1045,7 @@ def _capture_score(bb, st, mv, cap_hist):
     return SCORE_BAD_CAPTURE + base
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _cont_hist_score(cont_hist, played, ply, mv):
     """Continuation history for a quiet move, over CONT_PLANES planes."""
     if not USE_CONT_HIST:
@@ -1054,7 +1072,7 @@ def _cont_hist_score(cont_hist, played, ply, mv):
     return total
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _counter_move(counters, played, ply):
     if ply < 1 or played[ply] == 0:
         return 0
@@ -1062,7 +1080,7 @@ def _counter_move(counters, played, ply):
     return int64(counters[(prev & 0xF000) >> 12, (prev & 0xFC0) >> 6])
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _score_move(bb, st, mv, ply, tt_move, killers, main_hist, cap_hist,
                 cont_hist, counters, played):
     if tt_move != 0 and mv == tt_move:
@@ -1079,7 +1097,7 @@ def _score_move(bb, st, mv, ply, tt_move, killers, main_hist, cap_hist,
         + _cont_hist_score(cont_hist, played, ply, mv)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _insertion_sort(ml, scores, cnt):
     for i in range(1, cnt):
         cur_score = scores[i]
@@ -1093,7 +1111,30 @@ def _insertion_sort(ml, scores, cnt):
         ml[j + 1] = cur_move
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
+def _pick_next(ml, scores, i, cnt):
+    """Move the next move in stable descending order into slot i.
+
+    Selecting the FIRST maximum over i..cnt-1 and shifting the elements in
+    between one place right - not swapping - emits exactly the order the
+    stable insertion sort emitted, so the node count cannot move. Most nodes
+    try a handful of moves and never pay for the tail of the list."""
+    best = i
+    best_score = scores[i]
+    for j in range(i + 1, cnt):
+        if scores[j] > best_score:
+            best_score = scores[j]
+            best = j
+    if best != i:
+        best_move = ml[best]
+        for j in range(best, i, -1):
+            scores[j] = scores[j - 1]
+            ml[j] = ml[j - 1]
+        scores[i] = best_score
+        ml[i] = best_move
+
+
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _sort_moves(bb, st, ml, scores, cnt, ply, tt_move, killers, main_hist,
                 cap_hist, cont_hist, counters, played):
     """Score and order a move list.
@@ -1177,17 +1218,19 @@ def _sort_moves(bb, st, ml, scores, cnt, ply, tt_move, killers, main_hist,
             if CONT_PLANES >= 4 and use3:
                 total += int64(ch3[piece, tgt])
             scores[i] = total
-    _insertion_sort(ml, scores, cnt)
+    if not USE_PICK_MOVES:
+        _insertion_sort(ml, scores, cnt)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _sort_captures(bb, st, ml, scores, cnt, cap_hist):
     for i in range(cnt):
         scores[i] = _capture_score(bb, st, ml[i], cap_hist)
-    _insertion_sort(ml, scores, cnt)
+    if not USE_PICK_MOVES:
+        _insertion_sort(ml, scores, cnt)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _check_time(sc, fc):
     if (sc[SC_NODES] & 2047) == 0:
         with objmode(now="f8"):
@@ -1196,14 +1239,14 @@ def _check_time(sc, fc):
             sc[SC_STOP] = 1
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _in_check(bb, st):
     side = st[SIDE]
     king_sq = lsb(bb[K]) if side == WHITE else lsb(bb[k])
     return is_under_attack(bb, king_sq, side ^ 1)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _has_legal_move(bb, st, undo_bb, undo_st, mls, ply):
     """True if the side to move has any legal move.
 
@@ -1216,6 +1259,30 @@ def _has_legal_move(bb, st, undo_bb, undo_st, mls, ply):
             unmake(bb, st, undo_bb, undo_st, ply)
             return True
     return False
+
+
+@njit(cache=False, fastmath=True, error_model='numpy')
+def _tt_move_plausible(bb, st, mv):
+    """Cheap pseudo-legality screen for a move read straight from the TT.
+
+    The staged path makes the TT move before anything is generated, so
+    nothing else has vetted it. A key collision would hand us a move for a
+    different position, and make_move would XOR a piece off a square it never
+    occupied, leaving the board wrong until unmake restores it. Two tests
+    catch that: the mover must belong to the side to move and stand on the
+    source square, and the target must not hold one of our own pieces. The
+    castling encoding is exempt from the second test only because its target
+    is defined by the flag rather than read off the board.
+    """
+    side = st[SIDE]
+    piece = (mv & 0xF000) >> 12
+    if piece < 6 * side or piece >= 6 * side + 6:
+        return False
+    if (bb[piece] >> uint64(mv & 0x3F)) & ONE == ZERO:
+        return False
+    if mv & (1 << 23):
+        return True
+    return (bb[OCC_W + side] >> uint64((mv & 0xFC0) >> 6)) & ONE == ZERO
 
 
 @njit(cache=False, fastmath=True, error_model='numpy')
@@ -1260,7 +1327,7 @@ def _is_repetition(bb, rep, rep_idx, rep_base, null_floor):
     return 1 if history_hits >= 2 else 0
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _delta_prunable(bb, st, mv, ev, alpha):
     """Delta pruning. Winning the captured piece outright, plus a margin for
     the positional swing a capture can carry, still falls short of alpha, so
@@ -1276,44 +1343,59 @@ def _delta_prunable(bb, st, mv, ev, alpha):
     return ev + gain + QS_DELTA_MARGIN <= alpha
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def qsearch(acc, alpha, beta, bb, st, undo_bb, undo_st, mls, scores, cap_hist,
-            corr, sc, fc, ply, tt_key, tt_data):
+            corr, sc, fc, ply, tt_key, tt_data, acc_ready):
     _check_time(sc, fc)
     sc[SC_NODES] += 1
     if ply > MAX_SEARCH_PLY - 1:
+        if USE_CHILD_ACC and USE_NNUE and not acc_ready:
+            acc_update(acc, ply - 1, ply, undo_bb[ply - 1], bb, NET_FT_W,
+                       NET_FT_B, NET_L1, NET_TABLE, NET_BUCKETS)
         return _corrected_eval(bb, st, corr, evaluate_cached(bb, st, acc[ply]))
 
     # Probe before evaluating: a cutoff here saves the evaluation as well as
     # the subtree. Quiescence stores at depth 0, so these entries can never
     # satisfy a main-search node, which always probes with depth >= 1.
+    raw = int64(TT_NO_EVAL)
     if USE_QTT:
-        hit, _, _ = tt_probe(bb, alpha, beta, 0, ply, tt_key, tt_data,
-                             st[FIFTY])
+        hit, _, _, raw = tt_probe(bb, alpha, beta, int64(0), ply, tt_key,
+                                  tt_data, st[FIFTY])
         if hit != NO_HASH_ENTRY:
             return hit
 
     original_alpha = alpha
-    ev = _corrected_eval(bb, st, corr, evaluate_cached(bb, st, acc[ply]))
-    # Fail-soft, but only where the evaluation is denominated in material.
-    #
-    # Below SPECIALISED_MAX_PIECES the evaluation is a mating drive clamped to
-    # MATE_SCORE - 1 (btc_endgame.py:127), so a great many distinct positions
-    # score identically. Fail-hard returned the window edge and the search
-    # never saw that; propagating the true stand-pat instead hands the search a
-    # flat score across the whole conversion and it shuffles. Measured: full
-    # fail-soft here takes 320,684 nodes but loses KBN vs K to a threefold at
-    # move 14, where the gated version keeps the node win and converts.
-    #
-    # This is the same unit-scale rule delta pruning and correction history
-    # already follow, and the third bug that rule has caught.
+
+    # In check there is no stand pat: passing is not a lower bound when the
+    # king is attacked. The score starts at -INFINITY and every evasion is
+    # searched. Computed here so the lazy cutoff below can use it.
+    in_check = USE_QS_EVASION and _in_check(bb, st)
+
+    # Lazy stand-pat, fail-hard on purpose: the only claim it can make is
+    # 'at least beta'. Gated on piece count like every centipawn comparison
+    # in this file, because below SPECIALISED_MAX_PIECES the evaluation is a
+    # mating drive, not material.
+    if USE_LAZY_QS and not in_check and abs(beta) < MATE_SCORE \
+            and count_bits(bb[OCC_A]) > SPECIALISED_MAX_PIECES:
+        if _material_only(bb, st) - LAZY_QS_MARGIN >= beta:
+            return beta
+
+    if USE_CHILD_ACC and USE_NNUE and not acc_ready:
+        acc_update(acc, ply - 1, ply, undo_bb[ply - 1], bb, NET_FT_W,
+                   NET_FT_B, NET_L1, NET_TABLE, NET_BUCKETS)
+    # Under USE_TT_EVAL the entry just probed carries this position's raw
+    # evaluation when it has one, and it is the same number evaluate_cached
+    # would return, so the stand pat costs nothing here.
+    if not USE_TT_EVAL or raw == TT_NO_EVAL:
+        raw = int64(evaluate_cached(bb, st, acc[ply]))
+    ev = _corrected_eval(bb, st, corr, raw)
+    # Fail-soft only where the evaluation is denominated in material. Below
+    # SPECIALISED_MAX_PIECES the evaluation is a mating drive clamped to
+    # MATE_SCORE - 1, so many distinct positions score identically and a
+    # propagated stand-pat is flat across the whole conversion: full fail-soft
+    # there loses KBN vs K to a threefold at move 14.
     soft = count_bits(bb[OCC_A]) > SPECIALISED_MAX_PIECES
 
-    # In check there is no stand pat. Standing pat asserts that passing is a
-    # lower bound on the position, which is not legal reasoning when the king
-    # is attacked, and captures are not the only reply that matters. The score
-    # starts at -INFINITY and every evasion is searched.
-    in_check = USE_QS_EVASION and _in_check(bb, st)
     # Fifty-move draw. Unreachable while quiescence generated captures only -
     # a capture resets the counter - but an evasion is a quiet move, so with
     # USE_QS_EVASION the count can cross 100 here. Checkmate takes precedence
@@ -1328,8 +1410,8 @@ def qsearch(acc, alpha, beta, bb, st, undo_bb, undo_st, mls, scores, cap_hist,
         if ev >= beta:
             out = ev if soft else beta
             if USE_QTT:
-                tt_record(bb, out, int64(0), int64(HASH_BETA), 0, ply, tt_key,
-                          tt_data, int64(sc[SC_TT_GEN]), int64(0))
+                tt_record(bb, out, int64(0), int64(HASH_BETA), int64(0), ply, tt_key,
+                          tt_data, int64(sc[SC_TT_GEN]), int64(0), int64(raw))
             return out
         if ev > alpha:
             alpha = ev
@@ -1349,6 +1431,8 @@ def qsearch(acc, alpha, beta, bb, st, undo_bb, undo_st, mls, scores, cap_hist,
     qsrow = scores[ply]
     played = 0
     for i in range(cnt):
+        if USE_PICK_MOVES:
+            _pick_next(qrow, qsrow, i, cnt)
         mv = qrow[i] if USE_ROWVIEW else mls[ply, i]
         # Losing captures cannot raise the stand-pat. The verdict is already
         # in the score: _capture_score ran see_ge during the sort to separate
@@ -1367,12 +1451,12 @@ def qsearch(acc, alpha, beta, bb, st, undo_bb, undo_st, mls, scores, cap_hist,
         if make_move(bb, st, undo_bb, undo_st, ply, mv) == 0:
             continue
         played += 1
-        if USE_NNUE:
+        if USE_NNUE and not USE_CHILD_ACC:
             acc_update(acc, ply, ply + 1, undo_bb[ply], bb, NET_FT_W,
                        NET_FT_B, NET_L1, NET_TABLE, NET_BUCKETS)
         score = -qsearch(acc, -beta, -alpha, bb, st, undo_bb, undo_st, mls,
                          scores, cap_hist, corr, sc, fc, ply + 1, tt_key,
-                         tt_data)
+                         tt_data, int64(0))
         unmake(bb, st, undo_bb, undo_st, ply)
         if sc[SC_STOP]:
             return 0
@@ -1383,8 +1467,9 @@ def qsearch(acc, alpha, beta, bb, st, undo_bb, undo_st, mls, scores, cap_hist,
             if score >= beta:
                 out = score if soft else beta
                 if USE_QTT:
-                    tt_record(bb, out, int64(0), int64(HASH_BETA), mv, ply,
-                              tt_key, tt_data, int64(sc[SC_TT_GEN]), int64(0))
+                    tt_record(bb, out, int64(0), int64(HASH_BETA), int64(mv), ply,
+                              tt_key, tt_data, int64(sc[SC_TT_GEN]), int64(0),
+                              int64(raw))
                 return out
     # No legal evasion existed, so the side to move is mated here. Without
     # this the horizon reports a stand-pat score for a checkmate.
@@ -1395,12 +1480,12 @@ def qsearch(acc, alpha, beta, bb, st, undo_bb, undo_st, mls, scores, cap_hist,
     final = best_value if soft else alpha
     if USE_QTT:
         flag = int64(HASH_EXACT) if alpha > original_alpha else int64(HASH_ALPHA)
-        tt_record(bb, final, int64(0), int64(flag), 0, ply, tt_key,
-                  tt_data, int64(sc[SC_TT_GEN]), int64(0))
+        tt_record(bb, final, int64(0), int64(flag), int64(0), ply, tt_key,
+                  tt_data, int64(sc[SC_TT_GEN]), int64(0), int64(raw))
     return final
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _has_non_pawn_material(bb, st):
     """Zugzwang guard for the null move. With only king and pawns, "pass" is
     not a lower bound on the best move: the whole point of a zugzwang is that
@@ -1412,7 +1497,7 @@ def _has_non_pawn_material(bb, st):
     return (bb[N + 6] | bb[B + 6] | bb[R + 6] | bb[Q + 6]) != ZERO
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _null_reduction(depth, ev, beta):
     """Adaptive null-move reduction. BTC uses a flat R=2, which is very
     conservative by current practice: the deeper the remaining search and the
@@ -1438,7 +1523,7 @@ def _null_reduction(depth, ev, beta):
     return reduction
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _make_null(bb, st, rep, rep_idx):
     """Apply a null move (side flip, EP cleared). Non-recursive so the
     recursive call stays inside negamax: numba 0.67 rejects mutual recursion."""
@@ -1453,14 +1538,14 @@ def _make_null(bb, st, rep, rep_idx):
     return saved_ep, saved_hash
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _unmake_null(bb, st, saved_ep, saved_hash):
     st[SIDE] ^= 1
     st[EP] = saved_ep
     bb[HASH] = saved_hash
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _update_cont_hist(cont_hist, played, ply, mv, bonus):
     """Full bonus at 1 ply, three quarters at 2, half beyond."""
     if not USE_CONT_HIST:
@@ -1487,7 +1572,7 @@ def _update_cont_hist(cont_hist, played, ply, mv, bonus):
                            c_div(bonus, 2))
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _update_cont_entry(cont_hist, table, prev_piece, prev_tgt, piece, tgt, bonus):
     if bonus > HIST_MAX:
         bonus = HIST_MAX
@@ -1498,7 +1583,7 @@ def _update_cont_entry(cont_hist, table, prev_piece, prev_tgt, piece, tgt, bonus
     cont_hist[table, prev_piece, prev_tgt, piece, tgt] = e
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _update_capture_history(bb, st, mv, cap_hist, captures, capture_cnt, bonus):
     captured = _captured_piece(bb, st, mv)
     _update_cap_entry(cap_hist, (mv & 0xF000) >> 12, (mv & 0xFC0) >> 6,
@@ -1510,7 +1595,7 @@ def _update_capture_history(bb, st, mv, cap_hist, captures, capture_cnt, bonus):
                           bad_cap, -bonus)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _update_cap_entry(cap_hist, piece, tgt, captured, bonus):
     if bonus > HIST_MAX:
         bonus = HIST_MAX
@@ -1521,7 +1606,7 @@ def _update_cap_entry(cap_hist, piece, tgt, captured, bonus):
     cap_hist[piece, tgt, captured] = e
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _quiet_cutoff_update(mv, depth, ply, killers, main_hist, cont_hist,
                          counters, played, quiets, quiet_cnt):
     if killers[0, ply] != mv:
@@ -1540,7 +1625,7 @@ def _quiet_cutoff_update(mv, depth, ply, killers, main_hist, cont_hist,
         _update_cont_hist(cont_hist, played, ply, bad, -bonus)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _beta_cutoff_update(bb, st, mv, depth, ply, killers, main_hist, cap_hist,
                         cont_hist, counters, played, quiets, quiet_cnt,
                         captures, capture_cnt):
@@ -1553,7 +1638,7 @@ def _beta_cutoff_update(bb, st, mv, depth, ply, killers, main_hist, cap_hist,
                          counters, played, quiets, quiet_cnt)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _is_shuffling(mv, st, played, ply, plies_from_null):
     """True when this move walks a piece back and forth.
 
@@ -1577,7 +1662,7 @@ def _is_shuffling(mv, st, played, ply, plies_from_null):
         and (prev2 & 0x3F) == ((prev4 & 0xFC0) >> 6)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _draw_score(bb):
     """A draw is worth zero, but scoring every draw as the same zero
     leaves the search unable to order two equally drawn lines. One point
@@ -1591,7 +1676,7 @@ def _draw_score(bb):
     return int64(-1) + int64(bb[HASH] & uint64(2))
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _improving(static_evals, ev, ply, in_check):
     static_evals[ply] = EVAL_NONE if in_check else ev
     if in_check:
@@ -1607,7 +1692,7 @@ def _improving(static_evals, ev, ply, in_check):
 NODE_CONTINUE, NODE_RETURN, NODE_QSEARCH = 0, 1, 2
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _razor(acc, alpha, beta, depth, ev, bb, st, undo_bb, undo_st, mls, scores,
            cap_hist, corr, sc, fc, ply, tt_key, tt_data):
     """Razoring. Returns (should_return, value)."""
@@ -1617,23 +1702,24 @@ def _razor(acc, alpha, beta, depth, ev, bb, st, undo_bb, undo_st, mls, scores,
     if depth == 1:
         new_score = qsearch(acc, alpha, beta, bb, st, undo_bb, undo_st, mls,
                             scores, cap_hist, corr, sc, fc, ply, tt_key,
-                            tt_data)
+                            tt_data, int64(1))
         return True, new_score if new_score > score else score
     score += 269
     if score < beta and depth <= 2:
         new_score = qsearch(acc, alpha, beta, bb, st, undo_bb, undo_st, mls,
                             scores, cap_hist, corr, sc, fc, ply, tt_key,
-                            tt_data)
+                            tt_data, int64(1))
         if new_score < beta:
             return True, new_score if new_score > score else score
     return False, 0
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _prologue_head(acc, alpha, beta, depth, ply, rep_idx, pv_node, bb, st, rep,
-                   tt_key, tt_data, sc, fc, excluded, null_floor):
+                   tt_key, tt_data, sc, fc, excluded, null_floor, undo_bb,
+                   acc_ready):
     """Draw rules, mate distance pruning, TT probe and leaf dispatch.
-    Returns (code, value, alpha, beta, tt_move).
+    Returns (code, value, alpha, beta, tt_move, raw eval or TT_NO_EVAL).
 
     During a singular verification (excluded != 0) the TT cutoff is skipped:
     the stored score was produced by a search that included the very move we
@@ -1644,13 +1730,13 @@ def _prologue_head(acc, alpha, beta, depth, ply, rep_idx, pv_node, bb, st, rep,
         sc[SC_TT_PV] = 0
     if ply and _is_repetition(bb, rep, rep_idx, int64(sc[SC_REP_BASE]),
                               null_floor):
-        return NODE_RETURN, _draw_score(bb), alpha, beta, 0
+        return NODE_RETURN, _draw_score(bb), alpha, beta, 0, int64(TT_NO_EVAL)
     # With the fix on, the fifty-move test moves to _node_prologue, where a
     # move list exists to tell a draw from a checkmate delivered on the
     # hundredth half-move. Depth-0 nodes go to quiescence, which carries its
     # own test.
     if ply and not USE_DRAW_FIX and st[FIFTY] >= 100:
-        return NODE_RETURN, _draw_score(bb), alpha, beta, 0
+        return NODE_RETURN, _draw_score(bb), alpha, beta, 0, int64(TT_NO_EVAL)
 
     if USE_MDP and ply:
         if alpha < -MATE_VALUE + ply:
@@ -1658,50 +1744,70 @@ def _prologue_head(acc, alpha, beta, depth, ply, rep_idx, pv_node, bb, st, rep,
         if beta > MATE_VALUE - ply - 1:
             beta = MATE_VALUE - ply - 1
         if alpha >= beta:
-            return NODE_RETURN, alpha, alpha, beta, 0
+            return NODE_RETURN, alpha, alpha, beta, 0, int64(TT_NO_EVAL)
 
-    score, tt_move, tt_pv_bit = tt_probe(bb, alpha, beta, depth, ply,
-                                         tt_key, tt_data, st[FIFTY])
+    score, tt_move, tt_pv_bit, tt_raw = tt_probe(bb, alpha, beta, depth, ply,
+                                                 tt_key, tt_data, st[FIFTY])
     if USE_LMR_TTPV:
         sc[SC_TT_PV] = tt_pv_bit
     if excluded == 0 and ply and not pv_node and score != NO_HASH_ENTRY:
-        return NODE_RETURN, score, alpha, beta, tt_move
+        return NODE_RETURN, score, alpha, beta, tt_move, tt_raw
 
     _check_time(sc, fc)
 
+    # Under USE_CHILD_ACC the accumulator row for this node is built here and
+    # nowhere earlier: repetition, mate-distance pruning and the TT cutoff
+    # above all return without ever reading it, so the parent's delta was
+    # wasted work. From this point on every exit either evaluates (leaf
+    # dispatch, ply cap) or recurses, and a child builds its own row from this
+    # one.
+    if USE_CHILD_ACC and USE_NNUE and not acc_ready:
+        acc_update(acc, ply - 1, ply, undo_bb[ply - 1], bb, NET_FT_W,
+                   NET_FT_B, NET_L1, NET_TABLE, NET_BUCKETS)
     if depth == 0 or (USE_DEPTH_CLAMP and depth < 0
                       and count_bits(bb[OCC_A]) > SPECIALISED_MAX_PIECES):
         # The null-move reduction can exceed the depth remaining, so this is
-        # reached with depth < 0. Searching such a node full width also hands
-        # tt_record a negative depth, which packs into the depth field as 127
-        # and makes the slot permanently unreplaceable.
-        #
-        # Not below the specialised-endgame threshold, though. There the
-        # evaluation is a mating drive clamped to MATE_SCORE - 1, so many
-        # distinct positions score identically and a quiescence stand-pat is
-        # flat across the whole conversion - the same hazard that fail-soft
-        # quiescence and delta pruning hit. Measured: clamping there loses
-        # KBN vs K to a threefold after 19 moves, against mate in 20 without.
-        return NODE_QSEARCH, 0, alpha, beta, tt_move
+        # reached with depth < 0; searching such a node full width also hands
+        # tt_record a negative depth. Not clamped below the specialised
+        # endgame threshold, where a flat quiescence stand-pat loses KBN vs K
+        # to a threefold after 19 moves against mate in 20 without.
+        return NODE_QSEARCH, 0, alpha, beta, tt_move, tt_raw
     if ply > MAX_SEARCH_PLY - 1:
-        return NODE_RETURN, evaluate_cached(bb, st, acc[ply]), alpha, beta,             tt_move
-    return NODE_CONTINUE, 0, alpha, beta, tt_move
+        if USE_TT_EVAL:
+            if tt_raw != TT_NO_EVAL:
+                return NODE_RETURN, tt_raw, alpha, beta, tt_move, tt_raw
+        return (NODE_RETURN, int64(evaluate_cached(bb, st, acc[ply])), alpha,
+                beta, tt_move, tt_raw)
+    return NODE_CONTINUE, 0, alpha, beta, tt_move, tt_raw
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _node_prologue(acc, alpha, beta, depth, ply, rep_idx, pv_node, bb, st, undo_bb,
                    undo_st, mls, scores, cap_hist, corr, rep, static_evals,
                    tt_key, tt_data, sc, fc, excluded, null_floor, played):
     """Every non-recursive early exit of negamax, in BTC's order. Returns
-    (code, value, alpha, beta, depth, tt_move, in_check, ev, improving).
+    (code, value, alpha, beta, depth, tt_move, in_check, ev, improving,
+    material_scale, raw).
 
     A singular verification (excluded != 0) must reach the move loop, so RFP,
     razoring and IIR are all skipped in that case."""
-    code, value, alpha, beta, tt_move = _prologue_head(acc, 
+    # acc[ply] is already valid at the root (search_position refreshes it),
+    # after a null move (played[ply] == 0 with ply > 0: _make_null copies the
+    # row) and in a singular verification, which re-enters the same ply of the
+    # same position. Everywhere else the parent made a move and left the row
+    # stale, so under USE_CHILD_ACC the head below builds it. Computed only
+    # under the flag: with it off the parent has already built the row and
+    # this would be a memory read per node for nothing.
+    acc_ready = int64(1)
+    if USE_CHILD_ACC:
+        acc_ready = int64(1) if (ply == 0 or played[ply] == 0
+                                 or excluded != 0) else int64(0)
+    code, value, alpha, beta, tt_move, tt_raw = _prologue_head(acc, 
         alpha, beta, depth, ply, rep_idx, pv_node, bb, st, rep, tt_key,
-        tt_data, sc, fc, excluded, null_floor)
+        tt_data, sc, fc, excluded, null_floor, undo_bb, acc_ready)
     if code != NODE_CONTINUE:
-        return code, value, alpha, beta, depth, tt_move, 0, 0, 0, True
+        return (code, value, alpha, beta, depth, tt_move, 0, 0, 0, True,
+                int64(TT_NO_EVAL))
 
     sc[SC_NODES] += 1
 
@@ -1712,7 +1818,7 @@ def _node_prologue(acc, alpha, beta, depth, ply, rep_idx, pv_node, bb, st, undo_
     if USE_DRAW_FIX and ply and st[FIFTY] >= 100:
         if not in_check or _has_legal_move(bb, st, undo_bb, undo_st, mls, ply):
             return (NODE_RETURN, _draw_score(bb), alpha, beta, depth,
-                    tt_move, 0, 0, 0, True)
+                    tt_move, 0, 0, 0, True, int64(TT_NO_EVAL))
 
     if in_check:
         depth += 1
@@ -1722,10 +1828,18 @@ def _node_prologue(acc, alpha, beta, depth, ply, rep_idx, pv_node, bb, st, undo_
     # returns early. Evaluating anyway spent a full evaluation - a third of
     # runtime - on every check node.
     if in_check:
-        raw = int64(0)
+        # No evaluation exists for this node, so nothing is cached for it and
+        # nothing is read back: the sentinel travels on to tt_record. The
+        # value itself is dead - `gap` below is guarded on not in_check.
+        raw = int64(TT_NO_EVAL)
         ev = int64(0)
+    elif USE_TT_EVAL and tt_raw != TT_NO_EVAL:
+        # The entry _prologue_head probed already holds exactly what
+        # evaluate_cached would return here, so the forward pass is skipped.
+        raw = int64(tt_raw)
+        ev = _corrected_eval(bb, st, corr, raw)
     else:
-        raw = evaluate_cached(bb, st, acc[ply])
+        raw = int64(evaluate_cached(bb, st, acc[ply]))
         ev = _corrected_eval(bb, st, corr, raw)
     if USE_CORR_HIST and USE_CORR_CONT and not in_check \
             and count_bits(bb[OCC_A]) > SPECIALISED_MAX_PIECES:
@@ -1762,7 +1876,7 @@ def _node_prologue(acc, alpha, beta, depth, ply, rep_idx, pv_node, bb, st, undo_
         margin = RFP_MARGIN * (depth - improving)
         if ev - margin >= beta:
             return (NODE_RETURN, ev - margin, alpha, beta, depth, tt_move,
-                    in_check, ev, improving, material_scale)
+                    in_check, ev, improving, material_scale, raw)
 
     # depth <= 2, not 3: at depth 3 every path through _razor returns
     # (False, 0), so the call is a guaranteed no-op
@@ -1772,13 +1886,13 @@ def _node_prologue(acc, alpha, beta, depth, ply, rep_idx, pv_node, bb, st, undo_
                              tt_key, tt_data)
         if done:
             return (NODE_RETURN, value, alpha, beta, depth, tt_move,
-                    in_check, ev, improving, material_scale)
+                    in_check, ev, improving, material_scale, raw)
 
     return (NODE_CONTINUE, 0, alpha, beta, depth, tt_move, in_check, ev,
-            improving, material_scale)
+            improving, material_scale, raw)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _see_prunable(move_score, mv, depth, moves_searched, pv_node, in_check,
                   alpha, tt_move, excluded):
     """Prune losing captures at shallow depth.
@@ -1801,7 +1915,7 @@ def _see_prunable(move_score, mv, depth, moves_searched, pv_node, in_check,
     return move_score < SCORE_BAD_CAPTURE_LIMIT
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _skip_quiet(move_score, mv, depth, moves_searched, improving, ev, alpha,
                 pv_node, in_check, opp_in_check, material_scale,
                 opp_worse, corr_adj):
@@ -1841,7 +1955,7 @@ def _skip_quiet(move_score, mv, depth, moves_searched, improving, ev, alpha,
     return False
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _lmr_reduction(mv, depth, moves_searched, improving, in_check,
                    opp_in_check, pv_node, cut_node, main_hist, cont_hist,
                    played, ply, corr_adj, tt_pv, tt_capture, material_scale):
@@ -1886,16 +2000,10 @@ def _lmr_reduction(mv, depth, moves_searched, improving, in_check,
     return reduction if reduction > 0 else 0
 
 
-# nogil is what makes a parallel search possible at all, and it belongs here
-# and nowhere else: this is the only compiled function Python calls into
-# during a search, and calls between compiled functions never touch the GIL.
-# Inert while the engine is single-threaded, which is why it is unconditional
-# rather than gated - a flag would only mean the threaded path compiles a
-# second copy of a 2500 line function.
-#
-# It is not on its own safe to use. btc_nrt makes numba's reference counting
-# non-atomic, so a second thread corrupts memory silently. btc_parallel owns
-# that interlock and refuses to start threads unless BTC_NRT=0.
+# nogil is what makes a parallel search possible, and it belongs only here:
+# this is the one compiled function Python calls into during a search. Inert
+# single-threaded. Not safe on its own: btc_nrt makes reference counting
+# non-atomic, and btc_parallel refuses to start threads unless BTC_NRT=0.
 @njit(cache=False, fastmath=True, error_model='numpy', nogil=True)
 def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls,
             scores, killers, main_hist, cap_hist, corr, cont_hist,
@@ -1914,11 +2022,16 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
     pv_node = beta - alpha > 1
 
     code, value, alpha, beta, depth, tt_move, in_check, ev, improving, \
-        material_scale = \
+        material_scale, raw = \
         _node_prologue(acc, alpha, beta, depth, ply, rep_idx, pv_node, bb, st,
                        undo_bb, undo_st, mls, scores, cap_hist, corr, rep,
                        static_evals, tt_key, tt_data, sc, fc, excluded,
                        null_floor, played)
+    if not USE_TT_EVAL:
+        # Nothing reads a stored evaluation, so the sentinel goes to every
+        # tt_record below. Constant, so it costs no register held live across
+        # the move loop - measurable on the shipped path.
+        raw = int64(TT_NO_EVAL)
     corr_adj = int64(sc[SC_CORR_ADJ])
     # Read now, before any recursive call overwrites the slot. A pv node is
     # ttPv by definition even when the entry is missing.
@@ -1928,7 +2041,7 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
         return value
     if code == NODE_QSEARCH:
         return qsearch(acc, alpha, beta, bb, st, undo_bb, undo_st, mls, scores,
-                       cap_hist, corr, sc, fc, ply, tt_key, tt_data)
+                       cap_hist, corr, sc, fc, ply, tt_key, tt_data, int64(1))
 
     null_ok = USE_NULL and excluded == 0 and depth >= NULL_MIN_DEPTH \
         and not in_check and ply
@@ -2024,19 +2137,10 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
             and abs(beta) < MATE_SCORE - PROBCUT_MARGIN:
         probcut_beta = beta + PROBCUT_MARGIN
         pc_hit, pc_d, pc_f, pc_s = tt_peek(bb, ply, tt_key, tt_data)
-        # The depth floor is not decoration. Quiescence stores at depth 0,
-        # and those entries are a raw stand-pat rather than a search; the
-        # main search never sees them only because it probes at depth >= 1.
-        # This block probes at depth - SLACK, so it is the one place that
-        # invariant can be crossed by tuning the two constants apart.
-        #
-        # The flag test is an equality on purpose. A bitmask - `pc_f & 2`,
-        # or the usual `bound & LOWER` - would also admit flag 3, which is
-        # not a bound at all but the signature of an entry written at a
-        # negative depth: _tt_pack shifts that into an unsigned field, so
-        # it reads back as depth 127 and passes any depth gate, over a
-        # score that may be a fail-low. Those entries exist whenever
-        # BTC_DEPTH_CLAMP is off, which is the shipped default.
+        # Quiescence stores at depth 0 and those entries are a raw stand-pat;
+        # this block probes at depth - SLACK, so the floor keeps it above
+        # them. The flag test is an equality on purpose: a bitmask would admit
+        # flag 3, the signature of an entry written at a negative depth.
         floor = depth - PROBCUT_DEPTH_SLACK
         if floor < 1:
             floor = 1
@@ -2069,6 +2173,8 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
             pc_cnt = generate_captures(bb, st, mls[ply])
             _sort_captures(bb, st, mls[ply], scores[ply], pc_cnt, cap_hist)
             for pc_i in range(pc_cnt):
+                if USE_PICK_MOVES:
+                    _pick_next(mls[ply], scores[ply], pc_i, pc_cnt)
                 pc_mv = mls[ply, pc_i]
                 # Descending order, so once a losing capture appears every
                 # remaining move is losing too - the same list property
@@ -2083,7 +2189,7 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
                 rep[rep_idx] = bb[HASH]
                 if make_move(bb, st, undo_bb, undo_st, ply, pc_mv) == 0:
                     continue
-                if USE_NNUE:
+                if USE_NNUE and not USE_CHILD_ACC:
                     acc_update(acc, ply, ply + 1, undo_bb[ply], bb, NET_FT_W,
                                NET_FT_B, NET_L1, NET_TABLE, NET_BUCKETS)
                 played[ply + 1] = pc_mv
@@ -2091,7 +2197,8 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
                 # search and rejects most candidates outright.
                 pc_score = -qsearch(acc, -pc_beta, -pc_beta + 1, bb, st,
                                     undo_bb, undo_st, mls, scores, cap_hist,
-                                    corr, sc, fc, ply + 1, tt_key, tt_data)
+                                    corr, sc, fc, ply + 1, tt_key, tt_data,
+                                    int64(0))
                 if pc_score >= pc_beta:
                     pc_score = -negamax(acc, -pc_beta, -pc_beta + 1, pc_depth,
                                         ply + 1, rep_idx + 1, bb, st, undo_bb,
@@ -2108,20 +2215,15 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
                     # pc_depth + 1 is what was actually proven: the reduced
                     # search plus the move that led to it.
                     tt_record(bb, pc_score, pc_depth + 1, int64(HASH_BETA),
-                              pc_mv, ply, tt_key, tt_data,
-                              int64(sc[SC_TT_GEN]), tt_pv)
+                              int64(pc_mv), ply, tt_key, tt_data,
+                              int64(sc[SC_TT_GEN]), tt_pv, int64(raw))
                     return pc_score
 
     # Singular extension: if the TT move is much better than every alternative
-    # at reduced depth, it is worth an extra ply. Verified by searching this
-    # same position with that move excluded, against a window just below the
-    # stored score; failing low there means nothing else comes close.
-    #
-    # Runs before this ply's moves are generated. The C verifies after
-    # generating, but its move list is a stack local, while ours is the shared
-    # mls[ply] row: a verification at the same ply regenerates and re-sorts
-    # that row, so the parent would then iterate a list it did not sort. Same
-    # moves, different order. Generating afterwards avoids it.
+    # at reduced depth, it is worth an extra ply, verified by searching this
+    # position with that move excluded. Runs before this ply's moves are
+    # generated, because the verification reuses the shared mls[ply] row and
+    # would otherwise leave the parent iterating a list it did not sort.
     singular = 0
     # material_scale gates the whole block: below SPECIALISED_MAX_PIECES the
     # score is a clamped mating drive, so singular_beta is not a margin below
@@ -2180,20 +2282,92 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
                 # the tree smaller and are exactly what is wanted here.
                 singular = 0
 
-    # Killers belong to the subtree about to be searched, not to whichever
-    # sibling last wrote them. Two plies down, not one: ply + 1 is the
-    # opponent's turn and its killers are in use by the child right now, while
-    # ply + 2 is the same side to move as this node and is the slot a sibling
-    # subtree would have polluted. Clearing ply + 1 instead cost 21 percent
-    # more nodes at fixed depth. killers is (2, MAX_SEARCH_PLY + 1),
-    # so MAX_SEARCH_PLY is the last legal index and the guard is not optional:
-    # bounds checking is off, and an out of range write here would corrupt
-    # whatever numpy put after the array.
+    # Clear the killers two plies down, the slot a sibling subtree of the same
+    # side to move would have polluted; clearing ply + 1 cost 21 percent more
+    # nodes. The bound guard is not optional: bounds checking is off.
     if USE_KILLER_CLEAR and ply + 2 <= MAX_SEARCH_PLY:
         killers[0, ply + 2] = 0
         killers[1, ply + 2] = 0
 
+    hash_flag = int64(HASH_ALPHA)
+    best_move = 0
+    best_score = -INFINITY
+    legal_count = 0
+    moves_searched = 0
+    quiets = mls[MAX_SEARCH_PLY + ply]
+    quiet_cnt = 0
+    captures = scores[MAX_SEARCH_PLY + ply]
+    capture_cnt = 0
+    node_mark = int64(0)
+
+    # Stage one: search the TT move before the rest is sorted. It is the move
+    # the loop would search first anyway, and no pruner fires on the first
+    # move, so what this leaves behind is exactly the loop's state after one
+    # iteration. At the common cut node the scoring and sort never run. The
+    # sort still reads history the TT move's subtree has since updated, which
+    # is why this changed the fingerprint (259210 -> 268058) and measured a
+    # 13 percent smaller tree at depth 12. A verification search is excluded.
     cnt = generate_moves(bb, st, mls[ply])
+
+    staged = False
+    if tt_move != 0 and excluded == 0 and _tt_move_plausible(bb, st, tt_move):
+        staged = True
+        if USE_NODE_EFFORT and ply == 0:
+            node_mark = sc[SC_NODES]
+        rep[rep_idx] = bb[HASH]
+        if make_move(bb, st, undo_bb, undo_st, ply, tt_move) != 0:
+            if USE_NNUE and not USE_LAZY_ACC and not USE_CHILD_ACC:
+                acc_update(acc, ply, ply + 1, undo_bb[ply], bb, NET_FT_W,
+                           NET_FT_B, NET_L1, NET_TABLE, NET_BUCKETS)
+            legal_count = 1
+            if USE_NNUE and USE_LAZY_ACC and not USE_CHILD_ACC:
+                acc_update(acc, ply, ply + 1, undo_bb[ply], bb, NET_FT_W,
+                           NET_FT_B, NET_L1, NET_TABLE, NET_BUCKETS)
+            played[ply + 1] = tt_move
+            score = -negamax(acc, -beta, -alpha, depth - 1 + singular,
+                             ply + 1, rep_idx + 1,
+                             bb, st, undo_bb, undo_st, mls, scores, killers,
+                             main_hist, cap_hist, corr, cont_hist, counters,
+                             played, static_evals, pv_table, pv_len, rep,
+                             tt_key, tt_data, sc, fc, no_excl,
+                             int64(0) if pv_node else 1 - cut_node,
+                             null_floor)
+            unmake(bb, st, undo_bb, undo_st, ply)
+            if sc[SC_STOP]:
+                return 0
+            if tt_move & (1 << 20):
+                captures[capture_cnt] = tt_move
+                capture_cnt += 1
+            else:
+                quiets[quiet_cnt] = tt_move
+                quiet_cnt += 1
+            moves_searched = 1
+            if score > best_score:
+                best_score = score
+            if score > alpha:
+                if USE_NODE_EFFORT and ply == 0:
+                    sc[SC_BEST_NODES] = sc[SC_NODES] - node_mark
+                hash_flag = int64(HASH_EXACT)
+                best_move = tt_move
+                alpha = score
+                pv_table[ply, ply] = tt_move
+                for next_ply in range(ply + 1, pv_len[ply + 1]):
+                    pv_table[ply, next_ply] = pv_table[ply + 1, next_ply]
+                pv_len[ply] = pv_len[ply + 1]
+                if score >= beta:
+                    tt_record(bb, best_score, depth, int64(HASH_BETA),
+                              tt_move, ply, tt_key, tt_data,
+                              int64(sc[SC_TT_GEN]), tt_pv, int64(raw))
+                    _beta_cutoff_update(bb, st, tt_move, depth, ply, killers,
+                                        main_hist, cap_hist, cont_hist,
+                                        counters, played, quiets, quiet_cnt,
+                                        captures, capture_cnt)
+                    if not in_check and not (tt_move & (1 << 20)) \
+                            and best_score > ev:
+                        _update_correction(bb, st, corr, ev, best_score,
+                                           depth, 1, sc, played, ply)
+                    return best_score
+
     _sort_moves(bb, st, mls[ply], scores[ply], cnt, ply, tt_move, killers,
                 main_hist, cap_hist, cont_hist, counters, played)
 
@@ -2207,22 +2381,13 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
             and static_evals[ply - 1] != EVAL_NONE:
         opp_worse = static_evals[ply] > -static_evals[ply - 1]
 
-    hash_flag = int64(HASH_ALPHA)
-    best_move = 0
-    best_score = -INFINITY
-    legal_count = 0
-    moves_searched = 0
-    quiets = mls[MAX_SEARCH_PLY + ply]
-    quiet_cnt = 0
-    captures = scores[MAX_SEARCH_PLY + ply]
-    capture_cnt = 0
-
     row = mls[ply]
     srow = scores[ply]
-    node_mark = int64(0)
     for i in range(cnt):
+        if USE_PICK_MOVES:
+            _pick_next(row, srow, i, cnt)
         mv = row[i] if USE_ROWVIEW else mls[ply, i]
-        if mv == excluded:
+        if mv == excluded or (staged and mv == tt_move):
             continue
         mv_score = srow[i] if USE_ROWVIEW else scores[ply, i]
         # SEE pruning is decided on the position before the move, but applied
@@ -2231,7 +2396,7 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
         # The counter must include every legal move considered; ours counted
         # only those actually searched, so the pruners lagged.
         see_count = legal_count if USE_MOVECOUNT_FIX else moves_searched
-        prune_see = _see_prunable(mv_score, mv, depth, see_count,
+        prune_see = _see_prunable(mv_score, mv, depth, int64(see_count),
                                   pv_node, in_check, alpha, tt_move, excluded)
 
         if USE_NODE_EFFORT and ply == 0:
@@ -2239,7 +2404,7 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
         rep[rep_idx] = bb[HASH]
         if make_move(bb, st, undo_bb, undo_st, ply, mv) == 0:
             continue
-        if USE_NNUE and not USE_LAZY_ACC:
+        if USE_NNUE and not USE_LAZY_ACC and not USE_CHILD_ACC:
             acc_update(acc, ply, ply + 1, undo_bb[ply], bb, NET_FT_W,
                        NET_FT_B, NET_L1, NET_TABLE, NET_BUCKETS)
         legal_count += 1
@@ -2255,7 +2420,7 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
             continue
         # Below the pruning tests on purpose: a pruned move never reads this
         # accumulator, and nothing between make_move and here reads it either.
-        if USE_NNUE and USE_LAZY_ACC:
+        if USE_NNUE and USE_LAZY_ACC and not USE_CHILD_ACC:
             acc_update(acc, ply, ply + 1, undo_bb[ply], bb, NET_FT_W,
                        NET_FT_B, NET_L1, NET_TABLE, NET_BUCKETS)
 
@@ -2290,23 +2455,12 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
             else:
                 score = alpha + 1
             if score > alpha:
-                # How far above best_score the reduced search came back says how
-                # wrong the reduction was. Far above: the move deserves a ply
-                # more than new_depth. Barely above: it can afford a ply less.
-                #
-                # reduced == -1 means LMR never applied, and that path must
-                # re-search at new_depth unconditionally - applying the
-                # verify_depth > reduced guard there would skip the search and
-                # leave score at the sentinel alpha + 1.
-                #
-                # Both margins are centipawns compared against best_score, so
-                # they inherit the unit-scale rule. Below
-                # SPECIALISED_MAX_PIECES the score is a mating drive clamped to
-                # MATE_SCORE - 1, which makes `score < best_score + 8` true on
-                # essentially every move: the re-search then loses a ply on
-                # every move of the conversion. Measured: ungated, this loses
-                # KBN vs K to a threefold at move 14, the same signature the
-                # quiescence fail-soft bug produced.
+                # How far above best_score the reduced search came back says
+                # how wrong the reduction was: far above earns a ply, barely
+                # above loses one. reduced == -1 (no LMR) must re-search at
+                # new_depth unconditionally. Both margins are centipawns, so
+                # they inherit the unit-scale gate: ungated, this loses
+                # KBN vs K to a threefold at move 14.
                 verify_depth = new_depth
                 if reduced >= 0 and material_scale:
                     if reduced < new_depth and score > best_score + LMR_DEEPER:
@@ -2357,15 +2511,16 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
             pv_len[ply] = pv_len[ply + 1]
             if score >= beta:
                 if excluded == 0:
-                    tt_record(bb, best_score, depth, int64(HASH_BETA), mv, ply,
-                              tt_key, tt_data, int64(sc[SC_TT_GEN]), tt_pv)
+                    tt_record(bb, best_score, depth, int64(HASH_BETA), int64(mv), ply,
+                              tt_key, tt_data, int64(sc[SC_TT_GEN]), tt_pv,
+                              int64(raw))
                 _beta_cutoff_update(bb, st, mv, depth, ply, killers,
                                     main_hist, cap_hist, cont_hist, counters,
                                     played, quiets, quiet_cnt, captures,
                                     capture_cnt)
                 if excluded == 0 and not in_check and not (mv & (1 << 20))                         and best_score > ev:
                     _update_correction(bb, st, corr, ev, best_score, depth,
-                                       1, sc, played, ply)
+                                       int64(1), sc, played, ply)
                 return best_score
 
     if legal_count == 0:
@@ -2376,11 +2531,11 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
         return -MATE_VALUE + ply if in_check else _draw_score(bb)
 
     if excluded == 0:
-        tt_record(bb, best_score, depth, int64(hash_flag), best_move, ply,
-                  tt_key, tt_data, int64(sc[SC_TT_GEN]), tt_pv)
+        tt_record(bb, best_score, depth, int64(hash_flag), int64(best_move), ply,
+                  tt_key, tt_data, int64(sc[SC_TT_GEN]), tt_pv, int64(raw))
     if excluded == 0 and not in_check and best_score > -INFINITY             and not (best_move != 0 and (best_move & (1 << 20)))             and (best_score > ev) == (best_move != 0):
         _update_correction(bb, st, corr, ev, best_score, depth,
-                           1 if best_move != 0 else 0, sc, played, ply)
+                           int64(1) if best_move != 0 else int64(0), sc, played, ply)
     # best_score is set whenever a legal move was searched, and the first
     # legal move always is: _see_prunable and _skip_quiet both return False
     # while moves_searched == 0. The guard covers the degenerate case only.
@@ -2449,21 +2604,12 @@ def _is_slower_mate(best_score, new_score):
     return best_score > MATE_SCORE and MATE_SCORE < new_score < best_score
 
 
-# How much the next iteration is predicted to cost, as a multiple of the time
-# already spent. The loop starts another iteration only while
-# elapsed * ITER_RATIO <= adjusted_soft, so 2.0 means "stop once half the soft
-# budget is gone" - the textbook assumption that the next ply costs as much as
-# every ply before it.
-#
-# Measured on this engine, that assumption is wrong. Cumulative time per extra
-# ply, three positions, depths 10-20, is a median of **1.46**, not 2.00, so the
-# next iteration costs about 0.46x the time already spent. At 2.0 we stop at
-# 0.50x soft where 1.46 would allow 0.68x - about 37% more thinking per move.
-#
-# Safer than it looks: soft only gates whether to *start* another iteration.
-# hard_ms is what aborts one in flight, and that is what stands between us and
-# a flag, so this does not trade against time-loss risk. The spread is wide
-# (0.90 to 4.32 across positions), which is exactly what hard_ms absorbs.
+# Predicted cost of the next iteration as a multiple of the time spent so far;
+# another iteration starts only while elapsed * ITER_RATIO <= soft. Measured
+# on this engine the true ratio is about 1.46, so 2.0 stops at half of soft.
+# Only hard_ms aborts an iteration in flight, so this does not trade against
+# time-loss risk. Lowering it to 1.5 was tried once at a starved control and
+# lost; it has never been tested at the tournament control.
 ITER_RATIO = _tune("BTC_ITER_RATIO", 2.0)
 
 # Fraction of an iteration's nodes, in percent, above which the best move is

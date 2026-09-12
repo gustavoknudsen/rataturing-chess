@@ -60,6 +60,21 @@ def run_perft(fen, depth):
     return core.perft(bb, st, undo_bb, undo_st, mls, depth, 0)
 
 
+def test_attack_tables():
+    """The shipped attack_tables.npz is bit for bit what _fill_sliders builds.
+
+    Plain asserts rather than check(), so the count this file reports stays
+    the perft gate number."""
+    assert _os.path.exists(core.ATTACK_TABLES), core.ATTACK_TABLES
+    built = core._build_sliders()
+    live = [core.BISHOP_MASKS, core.ROOK_MASKS, core.BISHOP_ATTACKS,
+            core.ROOK_ATTACKS]
+    for name, have, fresh in zip(core._TABLE_NAMES, live, built):
+        assert np.array_equal(have, fresh), name
+        assert have.dtype == np.uint64 and have.flags["C_CONTIGUOUS"], name
+    print("attack tables match a fresh build")
+
+
 def test_bit_primitives():
     rng = random.Random(1)
     for _ in range(2000):
@@ -192,6 +207,7 @@ def main():
     t0 = time.perf_counter()
     core.warmup(compile_perft=True)
     print(f"warmup {time.perf_counter() - t0:.1f}s")
+    test_attack_tables()
     test_bit_primitives()
     test_perft_suite(deep)
     test_movegen_differential()

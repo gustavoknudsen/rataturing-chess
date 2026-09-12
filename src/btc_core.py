@@ -16,8 +16,16 @@ State layout:
                   3 fifty counter, 4 game halfmove number, 5 spare
 """
 
+import os
+
 import numpy as np
 from numba import int64, njit, uint64
+
+# Jit-only helpers. Suppressing the Python-callable wrappers cuts compile
+# time, but calling one of these from Python then crashes the process, so a
+# function gets this only once every call site is known to be jitted.
+_NOWRAP = {"no_cpython_wrapper": True, "no_cfunc_wrapper": True}
+
 
 U64 = np.uint64
 
@@ -145,12 +153,22 @@ def _xorshift32_stream(seed):
 
 
 def _init_zobrist():
-    """Bit-identical to the C engine's initRandomKeys (seed 1804289383)."""
-    rng = _xorshift32_stream(1804289383)
+    """Keys from splitmix64, seeded 1804289383.
+
+    The C engine built each key from four draws of a 32-bit xorshift, which
+    is a linear map of its 32-bit state: measured 2026-09-12, the 849 keys
+    had GF(2) rank 32, so every hash in the engine carried 32 bits and
+    distinct positions collided at the 32-bit birthday rate. splitmix64 is
+    not linear and gives full-rank 64-bit keys."""
+    state = 1804289383
 
     def random64():
-        parts = [next(rng) & 0xFFFF for _ in range(4)]
-        return parts[0] | (parts[1] << 16) | (parts[2] << 32) | (parts[3] << 48)
+        nonlocal state
+        state = (state + 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
+        z = state
+        z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
+        z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
+        return z ^ (z >> 31)
 
     piece_keys = np.zeros((12, 64), dtype=np.uint64)
     for piece in range(12):
@@ -218,7 +236,7 @@ def _build_leapers():
 PAWN_ATTACKS, KNIGHT_ATTACKS, KING_ATTACKS = _build_leapers()
 
 
-@njit(cache=False, error_model='numpy')
+@njit(cache=False, error_model='numpy', **_NOWRAP)
 def _mask_bishop(sq):
     att = ZERO
     tr, tf = sq // 8, sq % 8
@@ -234,7 +252,7 @@ def _mask_bishop(sq):
     return att
 
 
-@njit(cache=False, error_model='numpy')
+@njit(cache=False, error_model='numpy', **_NOWRAP)
 def _mask_rook(sq):
     att = ZERO
     tr, tf = sq // 8, sq % 8
@@ -249,7 +267,7 @@ def _mask_rook(sq):
     return att
 
 
-@njit(cache=False, error_model='numpy')
+@njit(cache=False, error_model='numpy', **_NOWRAP)
 def _slider_otf(sq, block, diagonal):
     att = ZERO
     tr, tf = sq // 8, sq % 8
@@ -267,7 +285,7 @@ def _slider_otf(sq, block, diagonal):
     return att
 
 
-@njit(cache=False, error_model='numpy')
+@njit(cache=False, error_model='numpy', **_NOWRAP)
 def _set_occupancy(index, bits_in_mask, mask):
     occ = ZERO
     for count in range(bits_in_mask):
@@ -293,12 +311,38 @@ def _fill_sliders(bmasks, rmasks, batt, ratt):
             ratt[sq, magic_index] = _slider_otf(sq, occ, False)
 
 
-BISHOP_MASKS = np.zeros(64, dtype=np.uint64)
-ROOK_MASKS = np.zeros(64, dtype=np.uint64)
-BISHOP_ATTACKS = np.zeros((64, 512), dtype=np.uint64)
-ROOK_ATTACKS = np.zeros((64, 4096), dtype=np.uint64)
+_TABLE_NAMES = ("bishop_masks", "rook_masks", "bishop_attacks", "rook_attacks")
+_TABLE_SHAPES = ((64,), (64,), (64, 512), (64, 4096))
+ATTACK_TABLES = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "attack_tables.npz")
 
-_fill_sliders(BISHOP_MASKS, ROOK_MASKS, BISHOP_ATTACKS, ROOK_ATTACKS)
+
+def _build_sliders():
+    tables = [np.zeros(shape, dtype=np.uint64) for shape in _TABLE_SHAPES]
+    _fill_sliders(*tables)
+    return tables
+
+
+def _slider_tables():
+    """The magic attack tables, read from attack_tables.npz when it is there.
+
+    Building them compiles _fill_sliders and _slider_otf, about 1.1 s of the
+    init budget, against milliseconds to read the same bits from 50 KB. The
+    shape and dtype checks matter because numba types these as globals, and
+    the build stays as the fallback so a missing file costs time and nothing
+    else."""
+    try:
+        with np.load(ATTACK_TABLES) as data:
+            tables = [np.ascontiguousarray(data[name], dtype=np.uint64)
+                      for name in _TABLE_NAMES]
+        assert all(t.shape == s for t, s in zip(tables, _TABLE_SHAPES))
+        return tables
+    except Exception as exc:
+        print(f"init: rebuilding attack tables {exc!r}", flush=True)
+        return _build_sliders()
+
+
+BISHOP_MASKS, ROOK_MASKS, BISHOP_ATTACKS, ROOK_ATTACKS = _slider_tables()
 
 
 @njit(cache=False, fastmath=True, error_model='numpy')
@@ -328,26 +372,26 @@ def count_bits(bbv):
     return cnt
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def bishop_attacks(sq, occ):
     occ &= BISHOP_MASKS[sq]
     occ *= BISHOP_MAGICS[sq]
     return BISHOP_ATTACKS[sq, int(occ >> BISHOP_SHIFTS[sq])]
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def rook_attacks(sq, occ):
     occ &= ROOK_MASKS[sq]
     occ *= ROOK_MAGICS[sq]
     return ROOK_ATTACKS[sq, int(occ >> ROOK_SHIFTS[sq])]
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def queen_attacks(sq, occ):
     return bishop_attacks(sq, occ) | rook_attacks(sq, occ)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def is_under_attack(bb, sq, attacking_side):
     base = 0 if attacking_side == WHITE else 6
     if PAWN_ATTACKS[attacking_side ^ 1, sq] & bb[base + P]:
@@ -364,42 +408,42 @@ def is_under_attack(bb, sq, attacking_side):
     return 0
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def get_source(mv):
     return mv & 0x3F
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def get_target(mv):
     return (mv & 0xFC0) >> 6
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def get_piece(mv):
     return (mv & 0xF000) >> 12
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def get_promoted(mv):
     return (mv & 0xF0000) >> 16
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def get_capture(mv):
     return mv & CAP_FLAG
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def get_double(mv):
     return mv & DBL_FLAG
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def get_enpassant(mv):
     return mv & EP_FLAG
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def get_castle_flag(mv):
     return mv & CASTLE_FLAG
 
@@ -407,7 +451,7 @@ def get_castle_flag(mv):
 SEE_VALUE = np.array([100, 305, 333, 563, 950, 32000] * 2, dtype=np.int64)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def attackers_to(bb, sq, occ):
     """All pieces of either colour attacking sq, using occ for slider blockers."""
     return ((PAWN_ATTACKS[BLACK, sq] & bb[P])
@@ -418,7 +462,7 @@ def attackers_to(bb, sq, occ):
             | (rook_attacks(sq, occ) & (bb[R] | bb[r] | bb[Q] | bb[q])))
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _least_valuable_attacker(bb, side_attackers, stm):
     """Cheapest attacker piece index in side_attackers, or -1 for king only."""
     base = 0 if stm == WHITE else 6
@@ -428,7 +472,7 @@ def _least_valuable_attacker(bb, side_attackers, stm):
     return -1
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _see_recompute_xrays(bb, attackers, to, occ, ptype):
     """Add sliders revealed behind the piece just removed from occ."""
     if ptype == P or ptype == B:
@@ -499,7 +543,7 @@ def see_ge(bb, st, mv, threshold):
     return res
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _add_promotions(ml, cnt, src, tgt, pawn, base, cap):
     for pt in (Q, R, N, B):
         ml[cnt] = src | (tgt << 6) | (pawn << 12) | ((base + pt) << 16) | cap
@@ -507,7 +551,7 @@ def _add_promotions(ml, cnt, src, tgt, pawn, base, cap):
     return cnt
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _gen_pawn_pushes(bb, ml, cnt, side):
     occ_all = bb[OCC_A]
     if side == WHITE:
@@ -522,7 +566,7 @@ def _gen_pawn_pushes(bb, ml, cnt, side):
         if tgt < 0 or tgt > 63 or (occ_all & (ONE << uint64(tgt))):
             continue
         if promo_lo <= src <= promo_lo + 7:
-            cnt = _add_promotions(ml, cnt, src, tgt, pawn, base, 0)
+            cnt = _add_promotions(ml, cnt, src, tgt, pawn, base, int64(0))
         else:
             ml[cnt] = src | (tgt << 6) | (pawn << 12)
             cnt += 1
@@ -533,7 +577,7 @@ def _gen_pawn_pushes(bb, ml, cnt, side):
     return cnt
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _gen_pawn_captures(bb, st, ml, cnt, side):
     ep = st[EP]
     if side == WHITE:
@@ -549,7 +593,7 @@ def _gen_pawn_captures(bb, st, ml, cnt, side):
             tgt = lsb(atts)
             atts &= atts - ONE
             if promo_lo <= src <= promo_lo + 7:
-                cnt = _add_promotions(ml, cnt, src, tgt, pawn, base, CAP_FLAG)
+                cnt = _add_promotions(ml, cnt, src, tgt, pawn, base, int64(CAP_FLAG))
             else:
                 ml[cnt] = src | (tgt << 6) | (pawn << 12) | CAP_FLAG
                 cnt += 1
@@ -559,7 +603,7 @@ def _gen_pawn_captures(bb, st, ml, cnt, side):
     return cnt
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _gen_castling(bb, st, ml, cnt, side):
     """Castling moves. The attack tests take int64() squares rather than the
     square constants: numba specialises on integer literals, and the literal
@@ -609,7 +653,7 @@ def _gen_castling(bb, st, ml, cnt, side):
     return cnt
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _piece_attacks(ptype, sq, occ):
     if ptype == N:
         return KNIGHT_ATTACKS[sq]
@@ -622,7 +666,7 @@ def _piece_attacks(ptype, sq, occ):
     return KING_ATTACKS[sq]
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _gen_piece_moves(bb, ml, cnt, side, captures_only):
     occ_all = bb[OCC_A]
     my_occ = bb[OCC_W] if side == WHITE else bb[OCC_B]
@@ -649,7 +693,7 @@ def _gen_piece_moves(bb, ml, cnt, side, captures_only):
 def generate_moves(bb, st, ml):
     """Pseudo-legal move generation. Fills ml (int32[256]), returns count."""
     side = st[SIDE]
-    cnt = _gen_pawn_pushes(bb, ml, 0, side)
+    cnt = _gen_pawn_pushes(bb, ml, int64(0), side)
     cnt = _gen_pawn_captures(bb, st, ml, cnt, side)
     cnt = _gen_castling(bb, st, ml, cnt, side)
     return _gen_piece_moves(bb, ml, cnt, side, False)
@@ -660,11 +704,11 @@ def generate_captures(bb, st, ml):
     """Captures, capture-promotions and en passant only (quiescence contract:
     quiet promotions and castling are intentionally skipped)."""
     side = st[SIDE]
-    cnt = _gen_pawn_captures(bb, st, ml, 0, side)
+    cnt = _gen_pawn_captures(bb, st, ml, int64(0), side)
     return _gen_piece_moves(bb, ml, cnt, side, True)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _remove_captured(bb, side, tgt):
     start_piece = p if side == WHITE else P
     tgt_bit = ONE << uint64(tgt)
@@ -675,7 +719,7 @@ def _remove_captured(bb, side, tgt):
             return
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _move_castle_rook(bb, tgt):
     if tgt == g1:
         rook, src, dst = R, h1, f1
@@ -704,7 +748,7 @@ def _rebuild_occupancies(bb):
     bb[OCC_A] = occ_w | occ_b
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _restore(bb, st, undo_bb, undo_st, ply):
     for i in range(16):
         bb[i] = undo_bb[ply, i]

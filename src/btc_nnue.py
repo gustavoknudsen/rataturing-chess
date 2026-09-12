@@ -18,6 +18,12 @@ import os
 import numpy as np
 from numba import int64, njit
 
+# Jit-only helpers. Suppressing the Python-callable wrappers cuts compile
+# time, but calling one of these from Python then crashes the process, so a
+# function gets this only once every call site is known to be jitted.
+_NOWRAP = {"no_cpython_wrapper": True, "no_cfunc_wrapper": True}
+
+
 from btc_core import ONE, ZERO, OCC_A, count_bits, lsb
 
 # Below this the hand-crafted evaluation stops returning material and starts
@@ -119,7 +125,7 @@ def refresh(bb, ft_w, ft_b, l1, acc, table, buckets):
                 acc[1, k] += ft_w[black_row, k]
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def propagate(acc, side, out_w, out_b, l1, qa, qb, scale, bucket):
     """SCReLU hidden layer and the single output, in centipawns.
 
@@ -159,7 +165,7 @@ def propagate(acc, side, out_w, out_b, l1, qa, qb, scale, bucket):
     return total * int64(scale) // (int64(qa) * int64(qb))
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _out_bucket(bb, out_buckets):
     """Piece count -> output bucket. Must match nnue_train.out_bucket_of.
 
@@ -199,13 +205,13 @@ def nnue_eval(bb, side, ft_w, ft_b, out_w, out_b, l1, qa, qb, scale,
                      _out_bucket(bb, out_w.shape[0]))
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def nnue_applies(bb):
     """False in the endgames the specialised evaluation owns."""
     return count_bits(bb[OCC_A]) >= NNUE_MIN_PIECES
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _persp_key(king_square, buckets, table):
     """Bucket and mirror state for one perspective, packed into one int.
 
@@ -218,7 +224,7 @@ def _persp_key(king_square, buckets, table):
     return 2 * table[king_square ^ flip] + (1 if flip else 0)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _refresh_side(bb, perspective, ft_w, ft_b, l1, acc, row, table, buckets):
     """Rebuild one perspective's accumulator into acc[row, perspective]."""
     for k in range(l1):
@@ -248,7 +254,7 @@ def _refresh_side(bb, perspective, ft_w, ft_b, l1, acc, row, table, buckets):
                 acc[row, perspective, k] += ft_w[index, k]
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _apply_delta(bb_before, bb_after, perspective, king, ft_w, l1, acc,
                  src_row, dst_row, table, buckets):
     """Carry one perspective forward across a move by board difference.

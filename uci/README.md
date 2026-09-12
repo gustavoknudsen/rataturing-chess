@@ -55,7 +55,7 @@ No build required. The adapter finds the engine in `../src`.
 | `OwnBook` | true | play the opening book |
 | `Move Overhead` | 50 | time reserved per move in ms |
 
-`Move Overhead` defaults to 420 in the competition build. That figure is not the engine overshooting its budget, which it never did by more than 9 ms. It is the platform's measured referee slack. A local GUI has none, so shipping 420 would give away most of a fast time control.
+`Move Overhead` was 420 in the qualification build and 100 in the finals build, after the platform's per-move charge was measured at 1 to 2 ms. The engine itself never overshoots its budget by more than 9 ms. A local GUI has no such charge, so the adapter defaults to 50.
 
 The book covers the first 20 moves. It is suppressed for `go infinite` and `go depth`, because answering an analysis request from a book returns a move with no evaluation and no line.
 

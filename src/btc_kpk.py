@@ -15,6 +15,12 @@ import os
 import numpy as np
 from numba import njit, uint64
 
+# Jit-only helpers. Suppressing the Python-callable wrappers cuts compile
+# time, but calling one of these from Python then crashes the process, so a
+# function gets this only once every call site is known to be jitted.
+_NOWRAP = {"no_cpython_wrapper": True, "no_cfunc_wrapper": True}
+
+
 from btc_core import KING_ATTACKS, PAWN_ATTACKS, WHITE
 
 DRAW = 0
@@ -25,7 +31,7 @@ UNKNOWN = 2
 KPK_SIZE = 64 * 24 * 64 * 2
 
 
-@njit(cache=False)
+@njit(cache=False, **_NOWRAP)
 def _pawn_index(sq):
     """Pawn squares are files a-d, ranks 2-7: 4 files x 6 ranks = 24."""
     rank = sq // 8
@@ -33,12 +39,12 @@ def _pawn_index(sq):
     return (rank - 1) * 4 + file
 
 
-@njit(cache=False)
+@njit(cache=False, **_NOWRAP)
 def _kpk_index(wk, pawn, bk, stm):
     return ((wk * 24 + _pawn_index(pawn)) * 64 + bk) * 2 + stm
 
 
-@njit(cache=False)
+@njit(cache=False, **_NOWRAP)
 def _legal_layout(wk, pawn, bk):
     """Kings apart, no piece overlapping another."""
     if wk == bk or wk == pawn or bk == pawn:
@@ -48,7 +54,7 @@ def _legal_layout(wk, pawn, bk):
     return True
 
 
-@njit(cache=False)
+@njit(cache=False, **_NOWRAP)
 def _classify_immediate(wk, pawn, bk, stm):
     """Terminal results that need no lookahead. Only the promotion win is
     seeded here; stalemate and pawn capture fall out of the move loops in
@@ -85,7 +91,7 @@ def _step(table):
     return changed
 
 
-@njit(cache=False)
+@njit(cache=False, **_NOWRAP)
 def _resolve(table, wk, pawn, bk, stm):
     """White to move wins if any move wins; black to move draws if any move
     draws. Unresolved children leave the position unknown for this pass."""
@@ -204,7 +210,7 @@ else:
     KPK_TABLE = _load()
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def kpk_win(wk, pawn, bk, stm):
     """Raw lookup. Inputs must already be normalised: white to promote, pawn
     on files a-d. Callers should use probe(), which does the normalisation."""

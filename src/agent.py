@@ -1,8 +1,10 @@
 """AI Chessathon agent: BetterThanCris ported to Python + numba.
 
 Entry point required by the platform: get_move(fen, time_left_ms) -> UCI.
-Everything heavy happens at import inside the 90 s init budget: numba
-compilation of the whole engine via a warmup search, and table construction.
+Everything heavy happens at import, inside the init budget: numba
+compilation of the whole engine via a warmup search, and table loading. The
+final cut that budget below the compile time; staged/agent_staged.py is the
+wrapper that met it.
 A python-chess legality check wraps every result so no failure path can
 return an illegal move, and no failure path raises: get_move falls back
 through our own parser and generator, which read positions python-chess
@@ -14,53 +16,27 @@ import time
 _import_started = time.perf_counter()
 
 # First, and flushed. stdout is a pipe in the platform container and therefore
-# block-buffered, so an unflushed line can sit unsent past the 90 s import
+# block-buffered, so an unflushed line can sit unsent past the import
 # watchdog, and no output inside that window is a loss. This proves the process
 # is alive before any of the expensive work starts.
 print("init: start", flush=True)
 
 import chess
 
-# Constraint panel. Every BTC_* flag in the engine is read with os.environ.get
-# at module import, and the engine modules are imported below, so anything set
-# here is live everywhere. That makes the flags reachable in competition, where
-# nothing outside this file can set an environment variable.
-#
-# Empty is the shipped configuration and changes nothing. setdefault, so a real
-# environment variable still wins and the development tooling keeps working.
-# Measured 2026-09-11, so the comments here are figures rather than guesses.
-# finals_day/NIGHT_PLAN.md carries the decision tree these belong to.
+# Constraint panel. Every BTC_* flag is read with os.environ.get at module
+# import, and the engine modules are imported below, so values set here are
+# live everywhere. setdefault, so a real environment variable still wins.
+# See docs/FINALS_DAY.md for the measurements behind the shipped values.
 PANEL = {
-    # Memory. The table is the only large allocation: a full agent uses
-    # 682 MB, and each halving of the table saves exactly its own size.
-    # 1 GB needs nothing. 512 MB needs the line below, which measures 459 MB.
-    # 256 MB is unreachable; the floor is 432 MB of numba runtime.
-    # "BTC_TT_ENTRIES": "2097152",  # power of two, rounded down if not
-
-    # Cores. BOTH of these are required together. BTC_THREADS alone is
-    # refused, because non-atomic refcounting plus threads is memory
-    # corruption. Setting BTC_NRT=0 gives back the 32% it is worth, so two
-    # threads may be a net loss: prove it in a practice round first.
-    # "BTC_THREADS": "4",
-    # "BTC_NRT": "0",
-
-    # Time control. Read the real increment into INCREMENT_MS below as well;
-    # these two only matter if finals_day/tc_tune.py says the control flags.
-    # "BTC_MOVE_OVERHEAD": "420",  # per-move reserve, ms
-    # "BTC_MTG": "40",             # assumed moves remaining
-
-    # Network. BTC_NNUE=0 falls back to the hand-crafted evaluation, which is
-    # weaker on average but has no distributional blind spots: reach for it
-    # only if the starting positions become irregular, Chess960 above all.
-    # "BTC_NET": "net_small.npz",  # smaller network, needs BTC_NET_UNITS too
-    # "BTC_NET_UNITS": "98",       # per-net eval scale, see btc_eval
-    # "BTC_NNUE": "0",
-
-    # Init. Both measured and both disappointing: ENDGAMES saves nothing at
-    # all, MINIMAL saves 28% and costs strength for the whole game. If the
-    # init budget is cut, ship finals_day/agent_staged.py instead of either.
-    # "BTC_MINIMAL": "1",
-    # "BTC_ENDGAMES": "0",
+    # Time management. The platform charges 1 to 2 ms per move, not the 420
+    # the qualification build reserved, and the engine was finishing lost
+    # games with a minute unused.
+    "BTC_MOVE_OVERHEAD": "100",
+    "BTC_MTG": "28",
+    # Levers kept for a changed platform, all measured:
+    # "BTC_TT_ENTRIES": "2097152",   memory cap 512 MB (uses 459 MB)
+    # "BTC_THREADS": "4", "BTC_NRT": "0",   more cores; both are required
+    # "BTC_NNUE": "0",   hand-crafted evaluation for irregular start positions
 }
 for _key, _value in PANEL.items():
     os.environ.setdefault(_key, _value)
@@ -95,19 +71,11 @@ def _round_down_pow2(value):
     return 1 << (int(value).bit_length() - 1)
 
 
-# 0 keeps the engine's own TT_ENTRIES. The transposition table is 256 MiB and
-# is by far the largest thing we allocate, so it is the knob to turn if the
-# memory limit drops. Entries are rounded down to a power of two. Edit the
-# default here, or set BTC_TT_ENTRIES in PANEL above.
+# 0 keeps the engine's own TT_ENTRIES (256 MiB, the largest allocation).
 TT_ENTRIES_OVERRIDE = _round_down_pow2(_int_env("BTC_TT_ENTRIES", 0))
 
-# The real increment of the real time control, in ms.
-#
-# IF THE TIME CONTROL CHANGES, THIS IS THE FIRST THING TO EDIT. Nothing
-# derives it and nothing detects a mismatch: the increment and the platform's
-# per-move overhead are confounded in the clock, so they cannot be separated
-# from observation. A wrong value here mis-budgets every move of every game
-# and produces no error, which is the worst failure mode available.
+# The increment of the real time control, in ms. Nothing derives it and a
+# wrong value mis-budgets every move silently.
 INCREMENT_MS = 500
 
 # Must precede every engine import: it rewrites how numba emits reference
@@ -118,6 +86,7 @@ import btc_core as core
 import btc_game
 import btc_search as search
 import btc_time
+import numpy as np
 
 _TT = TT_ENTRIES_OVERRIDE or search.TT_ENTRIES
 
@@ -127,7 +96,13 @@ _TT = TT_ENTRIES_OVERRIDE or search.TT_ENTRIES
 # the reference counting patch is memory corruption in a threaded process.
 THREADS = _int_env("BTC_THREADS", 1)
 
-if THREADS > 1:
+# Think on the opponent's clock. Pointless under the tournament rules, which
+# say both agents take the core in turns, so there is no CPU to think with
+# while the opponent thinks. Needs BTC_NRT=0 like any other thread. See
+# btc_parallel.Ponderer for why there is no ponderhit bookkeeping.
+PONDER = _int_env("BTC_PONDER", 0)
+
+if THREADS > 1 or PONDER:
     import btc_parallel
     PARALLEL = btc_parallel.ParallelSearch(THREADS, _TT)
     STATE = PARALLEL.main
@@ -143,6 +118,12 @@ else:
     def _search(bb, st, keys, count, soft, hard, max_depth=search.MAX_SEARCH_PLY):
         return search.search_position(STATE, bb, st, keys, count, soft, hard,
                                       max_depth)
+
+PONDERER = None
+if PONDER and PARALLEL is not None:
+    PONDERER = btc_parallel.Ponderer(PARALLEL)
+    print(f"init: pondering {'on' if PONDERER.state is not None else 'refused'}",
+          flush=True)
 
 TRACKER = btc_game.GameTracker()
 BB, ST = core.new_board()
@@ -262,7 +243,52 @@ def _book_move(fen, bb, st):
     return None
 
 
+def _ponder_next(fen, uci):
+    """Start thinking about the position we expect to be asked about next.
+
+    The guess is our own principal variation: we play `uci`, the opponent
+    replies with the second move of the PV. Everything the ponder thread
+    proves goes into the shared table, so a right guess means the next real
+    search starts warm and a wrong one means a few entries for a position that
+    did not happen. Never raises: this is an optimisation, and an exception
+    here would lose a game it was supposed to help win.
+    """
+    if PONDERER is None or PONDERER.state is None:
+        return
+    try:
+        if int(STATE.pv_len[0]) < 2:
+            return
+        reply = core.move_to_uci(int(STATE.pv_table[0, 1]))
+        board = chess.Board(_normalise_fen(fen))
+        board.push(chess.Move.from_uci(uci))
+        board.push(chess.Move.from_uci(reply))
+
+        bb, st = core.new_board()
+        core.parse_fen(board.fen(), bb, st)
+        # Real repetition history, extended by the two positions we are
+        # assuming. A truncated history would let the ponder search call
+        # something a draw that is not one and store that score in the shared
+        # table, which is the one way this could do harm rather than nothing.
+        keys, count = TRACKER.history()
+        extended = np.zeros(int(count) + 2, dtype=np.uint64)
+        extended[:count] = keys[:count]
+        mid_bb, mid_st = core.new_board()
+        board.pop()
+        core.parse_fen(board.fen(), mid_bb, mid_st)
+        extended[count] = mid_bb[core.HASH]
+        extended[count + 1] = bb[core.HASH]
+        PONDERER.start(bb, st, extended, int(count) + 2,
+                       int(STATE.sc[search.SC_TT_GEN]) + 1)
+    except Exception as exc:
+        print(f"ponder: not started {exc!r}", flush=True)
+
+
 def _search_move(fen, time_left_ms):
+    # Before anything else. A ponder thread still running while the real
+    # search starts would be a second thread on state the search is about to
+    # reset.
+    if PONDERER is not None:
+        PONDERER.stop()
     TRACKER.update(_normalise_fen(fen))
     bb, st = TRACKER.bb, TRACKER.st
     book = _book_move(fen, bb, st)
@@ -279,6 +305,7 @@ def _search_move(fen, time_left_ms):
     print(f"move {uci} score {score} depth {depth} nodes {nodes} "
           f"clock {time_left_ms}", flush=True)
     TRACKER.push_our_move(packed)
+    _ponder_next(fen, uci)
     return uci
 
 
@@ -290,26 +317,13 @@ _LAST_SPENT = [0.0]
 
 
 def _report_overhead(time_left_ms):
-    """Print the platform's real per move cost, derived from the clock.
+    """Print the platform's per-move cost, derived from the clock.
 
-    Between two calls our clock moves by exactly
-
-        drain = our own wall time + platform overhead - increment
-
-    and we measured our own wall time, so the overhead falls out. This
-    matters because OVERHEAD_MS = 420 was inferred from a rated floor and
-    never timed, and every margin in finals_day/tc_tune.py rests on it. If the
-    time control changes, one practice round now answers whether 420 is right
-    instead of leaving it a guess.
-
-    Diagnostic only. Nothing reads this, and it must never raise.
-
-    One known limitation: our own wall time is captured before the legality
-    check and the fallback, so if the search fails or returns an illegal move,
-    that move's cost is under-counted and the NEXT reading comes out high.
-    Both of those paths print loudly, so a skewed reading is easy to attribute.
-    The timing is not moved into a finally block because get_move has three
-    exits and is the one function that must never acquire a new way to break.
+    Between two calls our clock moves by our own wall time plus the platform's
+    overhead minus the increment, and we time our own half, so the overhead
+    falls out. Diagnostic only; never raises. Our wall time is captured before
+    the legality check, so a fallback move under-counts and the next reading
+    comes out high; both paths print loudly.
     """
     try:
         previous = _LAST_CLOCK[0]

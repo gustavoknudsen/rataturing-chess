@@ -13,7 +13,13 @@ evaluation.
 """
 
 import numpy as np
-from numba import njit, uint64
+from numba import int64, njit, uint64
+
+# Jit-only helpers. Suppressing the Python-callable wrappers cuts compile
+# time, but calling one of these from Python then crashes the process, so a
+# function gets this only once every call site is known to be jitted.
+_NOWRAP = {"no_cpython_wrapper": True, "no_cfunc_wrapper": True}
+
 
 from btc_core import (
     B, K, N, OCC_A, OCC_B, OCC_W, ONE, P, Q, R, SIDE, WHITE, ZERO, count_bits,
@@ -40,7 +46,7 @@ BDEG_FILES = uint64(int(FILE_MASK[1]) | int(FILE_MASK[3])
                     | int(FILE_MASK[4]) | int(FILE_MASK[6]))
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _chebyshev(a, b):
     dr = RANK_OF[a] - RANK_OF[b]
     df = FILE_OF[a] - FILE_OF[b]
@@ -78,17 +84,17 @@ def _push_close(a, b):
     return 140 - 20 * _chebyshev(a, b)
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _push_away(a, b):
     return 120 - _push_close(a, b)
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _square_colour(sq):
     return (sq & 1) ^ ((sq >> 3) & 1)
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _non_pawn_material(bb, side):
     base = 0 if side == WHITE else 6
     total = 0
@@ -97,7 +103,7 @@ def _non_pawn_material(bb, side):
     return total
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _lone_king_case(bb, strong, s_counts, npm_strong, s_king, w_king):
     """Weak side has a bare king. Returns (handled, score) for the strong side."""
     s_pawns, s_knights, s_bishops, s_rooks, s_queens = s_counts
@@ -111,7 +117,7 @@ def _lone_king_case(bb, strong, s_counts, npm_strong, s_king, w_king):
             and s_rooks == 0 and s_queens == 0:
         bishop_sq = lsb(bb[base + B])
         # a1 is square 56; mate must be delivered in a corner the bishop covers
-        drive = (w_king ^ 7) if _square_colour(bishop_sq) != _square_colour(56) \
+        drive = (w_king ^ 7) if _square_colour(bishop_sq) != _square_colour(int64(56)) \
             else w_king
         return True, (KNOWN_WIN + 3520) + _push_close(s_king, w_king) \
             + 420 * _push_to_corner(drive)
@@ -131,7 +137,7 @@ def _lone_king_case(bb, strong, s_counts, npm_strong, s_king, w_king):
     return False, 0
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _side_counts(bb, side):
     base = 0 if side == WHITE else 6
     return (count_bits(bb[base + P]), count_bits(bb[base + N]),
@@ -145,7 +151,7 @@ def _side_counts(bb, side):
 SPECIALISED_MAX_PIECES = 5
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def insufficient_material(bb):
     """King versus king, or king and a single minor versus king."""
     white_count = count_bits(bb[OCC_W])
@@ -187,7 +193,7 @@ def probe(bb, st):
     return False, 0
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _dispatch(bb, st, strong, weak, s_counts, w_counts, npm_strong, npm_weak,
               s_king, w_king):
     """BTC's branch chain, in its order: the later cases are only reached when
@@ -216,7 +222,7 @@ def _dispatch(bb, st, strong, weak, s_counts, w_counts, npm_strong, npm_weak,
     return False, 0
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _kp_vs_k(bb, st, strong, s_king, w_king):
     """KP vs K, decided exactly by the bitbase."""
     pawn_sq = lsb(bb[P] if strong == WHITE else bb[P + 6])
@@ -228,7 +234,7 @@ def _kp_vs_k(bb, st, strong, s_king, w_king):
     return True, KNOWN_WIN + PAWN_EG + RELATIVE_RANK[strong, pawn_sq]
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _weak_pawn_case(bb, st, strong, weak, s_counts, s_king, w_king):
     """Weak side has a king and one pawn: KR vs KP, KQ vs KP, KNN vs KP."""
     wp_sq = lsb(bb[P] if weak == WHITE else bb[P + 6])
@@ -257,7 +263,7 @@ def _weak_pawn_case(bb, st, strong, weak, s_counts, s_king, w_king):
     return False, 0
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _rook_vs_pawn(bb, st, strong, weak, s_king, w_king, wp_sq):
     """KR vs KP. Four cases: the strong king is in front of the pawn, the weak
     king is too far away to help, the weak king shields a pawn the strong king
@@ -286,7 +292,7 @@ def _rook_vs_pawn(bb, st, strong, weak, s_king, w_king, wp_sq):
                             - _chebyshev(wp_sq, queen_sq))
 
 
-@njit(cache=False, fastmath=True)
+@njit(cache=False, fastmath=True, **_NOWRAP)
 def _rook_vs_minor(bb, weak, w_counts, w_king):
     """KR vs KB and KR vs KN, both drawish."""
     if w_counts[2] == 1 and w_counts[1] == 0 and w_counts[3] == 0 \

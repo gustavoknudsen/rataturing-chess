@@ -4,14 +4,15 @@ Builds the two Polyglot books the engine ships. Both are standard `.bin`, read b
 
 The rules allow a shipped table to answer the opening or the endgame, and define the opening as a position whose move number is 20 or lower. A table that answers a middlegame position is a stored search and counts as an engine. Everything here stays inside that bound, and `btc_book.MAX_BOOK_MOVE` enforces it at runtime. See [`../docs/RULES.md`](../docs/RULES.md).
 
-## The two books
+## The three books
 
-| file | covers |
-|---|---|
-| `rataturing.bin` | the tournament's curated starting positions, to move 20 |
-| `rataturing_hedge.bin` | the standard start, as insurance for openings the main book misses |
+| file | covers | built |
+|---|---|---|
+| `rataturing_new.bin` | the starting positions the tournament had actually used by finals day, to move 20 | finals day, from the games played in the qualifier and the practice rounds |
+| `rataturing.bin` | the curated starting positions known before the qualifier, to move 20 | before the qualifier |
+| `rataturing_hedge.bin` | the standard start, as insurance for openings the other two miss | before the qualifier |
 
-The main book is built outward from the curated starts, which is why it has no entry for the standard starting position. Its moves come from our own engine labelling. The hedge fills gaps from public game data and an existing book, and is consulted only when the main book misses.
+The engine consults them in that order and plays the first hit. The two main books are built outward from the tournament's starting positions, which is why neither has an entry for the standard starting position; their moves come from our own engine labelling. The hedge fills gaps from public game data and an existing book, and is consulted only when both main books miss.
 
 Entries carry the label score in Polyglot's `learn` field, offset by `+100000`. An entry with `learn == 0` came from a merged source and carries no score of ours. That is what lets `verify/verify.py` separate our labelled moves from gap-fill.
 

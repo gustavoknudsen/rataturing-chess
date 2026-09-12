@@ -2,7 +2,8 @@
 
 Cold import is measured in a fresh subprocess because numba compilation state
 survives within a process. The platform recompiles every game, so cold import
-plus warmup must stay well under the 90 s init budget (local ceiling 65 s).
+plus warmup must stay well under the init budget: 90 s in the qualifier,
+30 s in the final, where the staged wrapper in staged/ took over.
 """
 
 # Engine modules live in src/; this script is run directly, so sys.path[0]

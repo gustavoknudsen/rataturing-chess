@@ -37,30 +37,21 @@ SHIP = [
     "btc_book.py",
     "btc_nnue.py",
     "btc_nrt.py",
-    # Shipped but never imported at BTC_THREADS=1, which is the shipped
-    # configuration. It rides along so that raising the thread count on
-    # finals day is a panel change rather than a file copy under time
-    # pressure. About 7 KB against a 50 MB cap.
+    # Only imported when BTC_THREADS > 1; ships so that is a panel change.
     "btc_parallel.py",
     "btc_search.py",
     "btc_time.py",
 ]
 
-# Data files: shipped when present, skipped when not, never parsed as source.
-# net.npz is the self-trained network. Shipping it is what turns the NNUE
-# evaluation on, because btc_eval only enables it when the file is actually
-# there - so a build with no net.npz is exactly the hand-crafted engine.
-# Both books ship. rataturing.bin has no entry for the standard start - it
-# is built outward from the tournament's CURATED opening positions, not from
-# move 1 - which is why an earlier note here wrongly called it zobrist
-# mismatched. Verified: it answers all 8 published curated samples and the
-# real round-107 rated position, 9 for 9.
-#
-# btc_book.py gates every lookup at MAX_BOOK_MOVE = 20. Never raise it: a
-# Zobrist key carries no move number, so a position stored at move 5 would
-# otherwise return a hit at move 34, and that runtime gate is the only thing
-# keeping a shipped table on the legal side of "an engine in another shape".
-DATA = ["net.npz", "rataturing.bin", "rataturing_hedge.bin"]
+# Data files: shipped when present, skipped when not. net.npz turns the
+# network evaluation on; without it the engine plays the hand-crafted
+# evaluation. The books are gated at MAX_BOOK_MOVE = 20 in btc_book.py, which
+# is what keeps a shipped table inside the rules: a Polyglot key carries no
+# move number, so a position stored at move 5 would otherwise answer at
+# move 34 by transposition. attack_tables.npz holds the precomputed magic
+# slider tables so they are loaded rather than compiled at import.
+DATA = ["net.npz", "rataturing_new.bin", "rataturing.bin", "rataturing_hedge.bin",
+        "attack_tables.npz"]
 
 # llvmlite is a hard dependency of numba - its metadata declares
 # llvmlite<0.50,>=0.49.0dev0 - so it is present wherever numba is, and

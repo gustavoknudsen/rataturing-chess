@@ -20,7 +20,7 @@ import chess.polyglot
 # be looked up. Do not raise it or add a path around it.
 MAX_BOOK_MOVE = 20
 
-BOOK_FILES = ("rataturing.bin", "rataturing_hedge.bin")
+BOOK_FILES = ("rataturing_new.bin", "rataturing.bin", "rataturing_hedge.bin")
 
 # The book stores a score in Polyglot's `learn` field, offset, with 0 meaning
 # "no score". A move the book itself scores as clearly losing is more likely a

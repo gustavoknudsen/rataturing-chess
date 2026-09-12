@@ -28,9 +28,6 @@ submission*.zip
 # diffing against past versions, never in the repo.
 archive/
 
-# Internal working notes: session handoffs, plans, per-experiment logs.
-# The design and rules documents in docs/ are tracked; these are not.
-docs/research/
 
 # Training notebooks. Only the notebook that produced the shipped network is
 # tracked; the rest are width and data experiments that were not adopted.
@@ -70,9 +67,12 @@ book/data/*
 release/
 *.spec
 
-# Finals-day contingency work. The scripts are tracked; their outputs are not.
-finals_day/nets/
-finals_day/staging/
+staged/staging/
 
 # Working notes for the next session, not part of the published repository.
 HANDOFF.md
+
+# Editor and assistant state, patch leftovers.
+.claude/
+*.orig
+*.rej

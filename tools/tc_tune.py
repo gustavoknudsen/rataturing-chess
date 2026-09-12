@@ -1,14 +1,15 @@
 """Pick MTG and the overhead model for a time control other than 120 + 0.5.
 
-    .venv/Scripts/python.exe finals_day/tc_tune.py
+    .venv/Scripts/python.exe tools/tc_tune.py
 
 The distinction this tool exists to respect: OVERHEAD_MS is two different
 things wearing one name. There is the real per-move cost the platform charges
-us, which is about 420 ms and which no setting of ours can change, and there
+us, which the finals-day logs measured at 1 to 2 ms, and there
 is the engine's model of that cost, which is what OVERHEAD_MS actually feeds.
-Tuning can only move the model. So the simulation always charges 420 ms of
+Tuning can only move the model. So the simulation always charges the measured
 real cost per move and lets the model vary, which is the only honest way to
-ask whether a different model plays a better game.
+ask whether a different model plays a better game. REAL_OVERHEAD_MS below
+is that measured figure; the engine's model is OVERHEAD_MS in btc_time.
 
 What this tool can and cannot tell you matters. Whether a configuration runs
 out of clock over a 100 move game is exact, and losing on time is a lost game,
@@ -37,10 +38,9 @@ sys.path.insert(0, os.path.join(
 
 import btc_time
 
-# What the platform really charges per move. Inferred, not measured directly:
-# our own search comes in within 9 ms of its budget at every clock level, and
-# a rated floor near 200 ms implies a real cost near this.
-REAL_OVERHEAD_MS = 420
+# What the platform charges per move, measured from the clock lines of the
+# finals-day match logs.
+REAL_OVERHEAD_MS = 2
 
 CONTROLS = [
     ("120 + 0.5  (tournament)", 120000, 500),
@@ -146,8 +146,8 @@ def main():
     print("")
     print("'nothing survives' means the real per move cost alone exceeds the")
     print("clock over 100 moves, so no setting of ours rescues that control.")
-    print("Measure the real overhead before believing those rows: 420 ms was")
-    print("inferred from a rated floor, never timed directly.")
+    print("REAL_OVERHEAD_MS is the finals-day measurement; re-measure it from")
+    print("the engine's clock lines if the platform changes.")
     return 0
 
 

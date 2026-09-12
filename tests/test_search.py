@@ -73,8 +73,10 @@ def _ref_qsearch(alpha, beta, bb, st, undo_bb, undo_st, mls, scores, cap_hist,
         alpha = ev
     cnt = core.generate_captures(bb, st, mls[ply])
     # ordering is value-neutral for alpha-beta; without it the reference
-    # explodes exponentially on sharp positions
+    # explodes exponentially on sharp positions. Sorted here rather than left
+    # to _sort_captures, which only scores when BTC_PICK_MOVES is on.
     se._sort_captures(bb, st, mls[ply], scores[ply], cnt, cap_hist)
+    se._insertion_sort(mls[ply], scores[ply], cnt)
     for i in range(cnt):
         if core.make_move(bb, st, undo_bb, undo_st, ply, mls[ply, i]) == 0:
             continue

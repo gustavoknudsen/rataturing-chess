@@ -179,7 +179,7 @@ def test_failure_paths():
     check("missing file", btc_book.load(), "no book")
     check("probes to None", btc_book.probe(chess.Board()), None)
 
-    os.environ["BTC_BOOK"] = "agent.py"      # not a multiple of 16 bytes
+    os.environ["BTC_BOOK"] = "btc_game.py"   # not a multiple of 16 bytes
     check("non-book file rejected", "rejected" in btc_book.load(), True)
     check("probes to None", btc_book.probe(chess.Board()), None)
 

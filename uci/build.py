@@ -39,7 +39,7 @@ REPO = os.path.abspath(os.path.join(HERE, os.pardir))
 SUBMISSION = os.path.join(REPO, "submission.zip")
 ADAPTER = os.path.join(HERE, "rataturing_uci.py")
 OUT = os.path.join(REPO, "release")
-VERSION = "1.0"
+VERSION = "1.1"
 VARIANTS = ("nnue", "classic")
 # Bundled explicitly: PyInstaller analyses the adapter, and the adapter does
 # not import these. Only the loose engine files do, and those are copied in

@@ -1,15 +1,12 @@
-"""Build the staged submission: instant import, engine compiles in background.
+"""Build the staged submission: the layout that played the London final.
 
-    python finals_day/stage.py                 -> finals_day/staging/staged/
-    python finals_day/stage.py --zip           -> also writes submission_staged.zip
+    python staged/build.py                 -> staged/staging/staged/
+    python staged/build.py --zip           -> also writes submission_staged.zip
 
-Use it when the init budget is cut below the ~31 s numba needs. The result
-imports in well under a second and plays from the pure-python fallback until
-the real engine is compiled, typically by about move 5.
-
-It is built from submission.zip, like uci/build.py, so what ships is the engine
-that competed with two files added and one renamed. The rename is the only
-change to the engine, and it is a file name, not a line of code.
+Built from submission.zip, like uci/build.py, so what ships is the engine that
+competed with two files added and one renamed: agent.py becomes agent_real.py,
+agent_staged.py takes its name, and agent_pure.py is the fallback. Every engine
+file is hashed against the archive before the zip is written.
 """
 
 import argparse
@@ -97,7 +94,7 @@ def main():
     if args.zip:
         write_zip()
     print("\nSmoke test it before trusting it:")
-    print("  python finals_day/test_staged.py")
+    print("  python tests/test_staged.py")
 
 
 if __name__ == "__main__":

@@ -17,6 +17,12 @@ import os
 import numpy as np
 from numba import int64, njit, uint64
 
+# Jit-only helpers. Suppressing the Python-callable wrappers cuts compile
+# time, but calling one of these from Python then crashes the process, so a
+# function gets this only once every call site is known to be jitted.
+_NOWRAP = {"no_cpython_wrapper": True, "no_cfunc_wrapper": True}
+
+
 # Compile budget is a live constraint, so the heavier
 # optional terms are toggleable and can be cut without touching the code.
 # Threats is on: it scored 63.3% over 30 games once the specialised endgames
@@ -34,15 +40,8 @@ import btc_nnue
 from btc_nnue import nnue_applies, nnue_eval
 
 # The self-trained network replaces the whole hand-crafted positional total.
-#
-# Enabled by the *presence of net.npz*, not by a flag default. The platform
-# gives us no way to set an environment variable, so a flag that defaults off
-# could never be turned on in the submission; and a flag that defaults on would
-# be wrong here in the repo, where there is no net. Keying on the file makes
-# both cases right by construction: package.py ships net.npz only when the
-# network has earned it, and a zip without it is exactly the hand-crafted
-# engine. BTC_NNUE=0 still forces it off, which is what gives an A/B match its
-# control arm once net.npz is sitting in the working directory.
+# It is enabled by the presence of net.npz, so a zip without the file is
+# exactly the hand-crafted engine; BTC_NNUE=0 forces it off for A/B matches.
 _NET_PATH = btc_nnue.find_net() if os.environ.get("BTC_NNUE", "1") == "1" \
     else None
 USE_NNUE = _NET_PATH is not None
@@ -64,22 +63,12 @@ else:
     NET_BUCKETS = 1
     NET_OUT_BUCKETS = 1
 
-# The network is trained on standard centipawns; this engine's scores are
-# wider. Every search margin - RFP, futility, delta, the aspiration window -
-# is a constant in engine units, so without this conversion the network's
-# narrower output silently strengthens all of them and the result is a
-# different search, not a different evaluation.
-#
-# Measured, not nominal: the ratio of the two evaluators' output spreads over
-# held-out positions. The nominal pawn ratio of 126 would have made the
-# network's scores about 35% too small.
-#
-# **This number belongs to one network and must be re-measured for any other.**
-# Nets measured here have ranged from 96 to 194, and running a net at another
-# net's units rescales every margin, so a stronger net can look broken. The
-# platform passes no environment variables, so this default is what ships:
-#
-#     .venv/Scripts/python.exe nnue_gate.py <net.npz> D:/chess_nnue/bp2b 20000
+# Network output to engine units. The network is trained on standard
+# centipawns and this engine's scores are wider; every search margin is a
+# constant in engine units, so without this conversion the search changes,
+# not just the evaluation. Measured per network as the ratio of the two
+# evaluators' output spreads (training/nnue_gate.py); nets have ranged from 96
+# to 194, and running a net at another net's units rescales every margin.
 NET_UNITS = int(os.environ.get("BTC_NET_UNITS", "98"))
 
 from btc_core import (
@@ -242,7 +231,7 @@ KNIGHT_ON_QUEEN_MG, KNIGHT_ON_QUEEN_EG = 16, 11
 SLIDER_ON_QUEEN_MG, SLIDER_ON_QUEEN_EG = 62, 21
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def c_div(a, b):
     """C integer division: truncation toward zero. Requires b > 0."""
     q = a // b
@@ -251,12 +240,12 @@ def c_div(a, b):
     return q
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _taper(mg, eg, phase):
     return c_div(mg * phase + eg * (OPENING_PHASE - phase), OPENING_PHASE)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _stage_value(mg, eg, phase, stage):
     """BTC only interpolates inside the middlegame band.
 
@@ -271,7 +260,7 @@ def _stage_value(mg, eg, phase, stage):
     return mg if stage == 0 else eg
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def game_stage(phase):
     if phase > OPENING_PHASE:
         return 0
@@ -280,7 +269,7 @@ def game_stage(phase):
     return 2
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def game_phase(bb):
     """Non-pawn material on both sides, BTC's getGameStageScore.
 
@@ -297,7 +286,7 @@ def game_phase(bb):
     return score
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _pawn_attack_span(bb, side):
     """Squares the side's pawns attack now or could attack by advancing."""
     span = ZERO
@@ -326,7 +315,7 @@ def _pawn_attack_span(bb, side):
     return span
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _pawn_attacks_of(bb, side):
     attacks = ZERO
     doubled = ZERO
@@ -340,7 +329,7 @@ def _pawn_attacks_of(bb, side):
     return attacks, doubled
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _king_blockers(bb, us):
     """Pieces of either colour pinned against `us`'s king by a single blocker."""
     ksq = lsb(bb[K]) if us == WHITE else lsb(bb[K + 6])
@@ -360,7 +349,7 @@ def _king_blockers(bb, us):
     return blockers
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _mobility_area(bb, side, enemy_pawn_attacks, blockers):
     """Squares that count toward mobility: not our blocked or low pawns, not
     our king or queen, not pinned pieces, not attacked by an enemy pawn."""
@@ -376,7 +365,7 @@ def _mobility_area(bb, side, enemy_pawn_attacks, blockers):
     return ~(own | blockers | enemy_pawn_attacks)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _piece_mobility(bb, piece_type, sq, side, area, blockers):
     """Attacked squares inside the mobility area, x-raying through queens and
     (for rooks) friendly rooks, restricted to the pin line when pinned."""
@@ -397,7 +386,7 @@ def _piece_mobility(bb, piece_type, sq, side, area, blockers):
     return count_bits(att & area)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _passed_pawn(bb, sq, side, phase, enemy_king_sq, own_king_sq,
                  own_pawn_att, own_attacks, enemy_attacks):
     """Passed pawn bonus by relative rank and file, with a king-race term in
@@ -447,7 +436,7 @@ def _passed_pawn(bb, sq, side, phase, enemy_king_sq, own_king_sq,
         - _taper(PASSED_FILE_MG, PASSED_FILE_EG, phase) * edge
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _passer_path(bb, sq, side, push, w, span, to_queen, mg, eg, own_pawn_att,
                  own_attacks, enemy_attacks):
     """Reward a passer whose road to promotion is clear or covered.
@@ -490,7 +479,7 @@ def _passer_path(bb, sq, side, push, w, span, to_queen, mg, eg, own_pawn_att,
     return mg + k * w, eg + k * w
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _chebyshev(a, b):
     dr = RANK_OF[a] - RANK_OF[b]
     df = FILE_OF[a] - FILE_OF[b]
@@ -501,7 +490,7 @@ def _chebyshev(a, b):
     return dr if dr > df else df
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _king_proximity(ksq, sq):
     """Chebyshev distance capped at 5, as BTC's kingProximity. Without the cap
     the king-race term keeps growing past the range the weights were fitted
@@ -510,7 +499,7 @@ def _king_proximity(ksq, sq):
     return d if d < 5 else 5
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _pawn_structure(bb, side, enemy_att):
     """Per-pawn structure terms, ported from BTC pawnStructureTerms.
 
@@ -532,7 +521,7 @@ def _pawn_structure(bb, side, enemy_att):
     return mg, eg
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _pawn_terms(sq, side, own, enemy, enemy_att):
     """Structure terms for one pawn, from its own side's point of view."""
     mg = 0
@@ -613,7 +602,7 @@ def _pawn_terms(sq, side, own, enemy, enemy_att):
 
     return mg, eg
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _shelter_storm(bb, side, ksq):
     """King shelter and pawn storm, ported from BTC getKingShelter and the
     tail of getKingSafety. Returns raw (mg, eg); the caller interpolates.
@@ -667,13 +656,13 @@ def _shelter_storm(bb, side, ksq):
     return mg, eg
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _front_most(bbv, side):
     """BTC's frontMostSquare(!side, bb): the pawn nearest our own king."""
     return _msb(bbv) if side == WHITE else lsb(bbv)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _min_pawn_distance(pawns, ksq):
     """Manhattan distance from the king to its nearest own pawn, BTC's
     distance(). 0 when we have no pawns at all, capped at 8."""
@@ -696,7 +685,7 @@ def _min_pawn_distance(pawns, ksq):
             best = df + dr
     return best
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _msb(bbv):
     idx = 0
     while bbv:
@@ -705,7 +694,7 @@ def _msb(bbv):
     return idx
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _minor_terms(bb, piece_type, sq, side, phase, own_pawn_att, enemy_pawn_att,
                  enemy_pawn_span):
     """Outposts, minor behind pawn, king protector, long diagonal bishop."""
@@ -756,7 +745,7 @@ def _minor_terms(bb, piece_type, sq, side, phase, own_pawn_att, enemy_pawn_att,
     return score
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _bishop_pawn_terms(bb, sq, side, phase, own_pawn_att):
     """Pawns on the bishop's colour, the long diagonal, and enemy pawns it
     x-rays through the queens. The first and last were missing from the port."""
@@ -784,12 +773,12 @@ def _bishop_pawn_terms(bb, sq, side, phase, own_pawn_att):
     return score
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _square_colour(sq):
     return (sq & 1) ^ ((sq >> 3) & 1)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _rook_file_term(bb, sq, side, phase):
     own_pawns = bb[P] if side == WHITE else bb[P + 6]
     enemy_pawns = bb[P + 6] if side == WHITE else bb[P]
@@ -806,7 +795,7 @@ def _rook_file_term(bb, sq, side, phase):
     return _taper(ROOK_OPEN_MG[1], ROOK_OPEN_EG[1], phase)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _side_score(bb, side, phase, own_pawn_att, enemy_pawn_att, enemy_pawn_span,
                 area, blockers, own_attacks, enemy_attacks):
     """All per-piece terms for one side, from that side's point of view.
@@ -856,7 +845,7 @@ def _side_score(bb, side, phase, own_pawn_att, enemy_pawn_att, enemy_pawn_span,
     return score
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _accumulate(bb, side):
     """Attack sets for one side. Returns
     (minor, rook, queen, king, all, doubly attacked).
@@ -900,7 +889,7 @@ def _accumulate(bb, side):
             double)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _queen_threats(bb, us, our_knight, our_bishop, our_rook, our_double,
                    strongly_protected_them, area):
     """Squares from which we could fork or hit a lone enemy queen next move.
@@ -921,7 +910,7 @@ def _queen_threats(bb, us, our_knight, our_bishop, our_rook, our_double,
     return knight_hits, slider_hits, weight
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _pawn_push_threats(bb, us, our_all, their_all, their_pawn_att,
                        non_pawn_enemies):
     """Enemy pieces attacked by a pawn we could safely push next move."""
@@ -943,7 +932,7 @@ def _pawn_push_threats(bb, us, our_all, their_all, their_pawn_att,
     return count_bits(threatened & non_pawn_enemies)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _threats(bb, us, phase, our_knight, our_bishop, our_rook, our_king,
              our_all, our_double, their_all, their_pawn_att, their_double,
              their_queen_att, area):
@@ -1022,7 +1011,7 @@ def _threats(bb, us, phase, our_knight, our_bishop, our_rook, our_king,
     return _taper(mg, eg, phase)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _king_safety(bb, side, phase, own_all, own_double, own_king_att,
                  own_queen_att, own_knight_att, own_pawn_double, enemy_all,
                  enemy_double, enemy_rook_att, enemy_queen_att,
@@ -1110,7 +1099,7 @@ def _king_safety(bb, side, phase, own_all, own_double, own_king_att,
     return -_taper(mg, eg, phase)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _kd_checks(ksq, rook_rays, bishop_rays, safe, enemy_rook_att,
                enemy_queen_att, enemy_bishop_att, enemy_knight_att,
                own_queen_att):
@@ -1144,7 +1133,7 @@ def _kd_checks(ksq, rook_rays, bishop_rays, safe, enemy_rook_att,
     return danger, unsafe
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _kd_attackers(bb, them, king_ring, king_adj, occ):
     """Enemy pieces whose attacks reach the king ring: how many, their summed
     weight, and how many squares directly beside the king they hit."""
@@ -1172,7 +1161,7 @@ def _kd_attackers(bb, them, king_ring, king_adj, occ):
     return count, weight, adj_hits
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _kd_blockers(bb, side, ksq):
     """Pieces of either colour that alone block an enemy slider from the king.
     Snipers are found with the board cleared, then a single occupied square
@@ -1192,17 +1181,17 @@ def _kd_blockers(bb, side, ksq):
 
 # The twelve imbalance piece counts are each below 16, so they pack into one
 # integer as 4-bit fields. This keeps the term allocation-free on the hot path.
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _count_of(packed, side, pt):
     return int64((packed >> uint64(side * 24 + pt * 4)) & uint64(0xF))
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _clamp15(v):
     return 15 if v > 15 else v
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _pack_side(bb, base, shift):
     bishops = count_bits(bb[base + B])
     packed = uint64(1 if bishops > 1 else 0) << uint64(shift)
@@ -1214,12 +1203,12 @@ def _pack_side(bb, base, shift):
     return packed
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _pack_counts(bb):
     return _pack_side(bb, 0, 0) | _pack_side(bb, 6, 24)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _space(bb, us, phase, their_pawn_att, their_all, white_pawn_double,
            black_pawn_double):
     """Safe central squares in our own half, weighted by how crowded and how
@@ -1257,7 +1246,7 @@ def _space(bb, us, phase, their_pawn_att, their_all, white_pawn_double,
     return c_div(bonus * weight * weight, 16)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _imbalance_side(packed, us, phase_idx):
     them = 1 - us
     bonus = 0
@@ -1283,7 +1272,7 @@ def _imbalance(bb, phase):
     return _taper(mg, eg, phase)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _passed_count(bb):
     """Passed pawns of both colours."""
     white = bb[P]
@@ -1304,7 +1293,7 @@ def _passed_count(bb):
     return total
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _initiative(bb, phase, score):
     """How winnable the position is, as opposed to how good it looks.
 
@@ -1356,20 +1345,14 @@ def _initiative(bb, phase, score):
     return _taper(sign * u, sign * v, phase)
 
 
-# Material-only fallback, used instead of the hand-crafted evaluation when the
-# network is shipped. This is what keeps _hand_crafted out of the compiled
-# build entirely: with USE_NNUE a compile-time constant, numba never reaches it,
-# and the ~27 s that the full evaluation costs to compile disappears from init.
-# It matters because the incremental accumulator pushed init to 42.2 s against a
-# 90 s platform budget at 1.8x - too little headroom to be safe.
-#
-# It only ever runs below NNUE_MIN_PIECES, where insufficient_material and
-# endgame_probe already answer nearly everything (KPK, KBNvK, KRvK, KQvK). This
-# is the last-resort arm for the handful of tiny positions they decline.
+# Material-only fallback for the network build, below NNUE_MIN_PIECES, where
+# the endgame probes already answer nearly everything. With USE_NNUE a
+# compile-time constant, numba never compiles _hand_crafted, which saves
+# about 27 s of init.
 _MAT = np.array([100, 320, 330, 500, 900, 0], dtype=np.int64)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _material_only(bb, st):
     score = 0
     for piece in range(6):
@@ -1378,7 +1361,7 @@ def _material_only(bb, st):
     return score if st[SIDE] == WHITE else -score
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _specialised(bb, st):
     """(handled, score) for the endgames that own their own evaluation."""
     if insufficient_material(bb):
@@ -1415,7 +1398,7 @@ def evaluate(bb, st):
     return _hand_crafted(bb, st)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def evaluate_cached(bb, st, acc_row):
     """Evaluation using an accumulator the caller already maintains.
 
@@ -1437,7 +1420,7 @@ def evaluate_cached(bb, st, acc_row):
     return _hand_crafted(bb, st)
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+@njit(cache=False, fastmath=True, error_model='numpy', **_NOWRAP)
 def _hand_crafted(bb, st):
     """The hand-crafted positional evaluation, side-to-move relative."""
     phase = game_phase(bb)

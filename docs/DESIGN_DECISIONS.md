@@ -22,9 +22,9 @@ python-chess is too slow in the hot path and its objects cannot cross into njit 
 
 python-chess is still used, deliberately, at the boundary: parsing the FEN the referee sends, the legality guard on book moves, and a final legality check on the move we return. Those are once-per-move costs where correctness matters more than speed, and using a well-tested library there removes a whole class of bug.
 
-## 3. Magic tables: generated at import
+## 3. Magic tables: shipped as data
 
-Sliding-piece attack tables are built during import rather than shipped as data. Shipping them would cost megabytes against the 50 MB cap and save only a few seconds. Generation is part of the init budget, which is measured and has comfortable headroom.
+Sliding-piece attack tables were generated during import until finals day, when the init budget dropped to 30 seconds and every second of compile counted. They now ship as `src/attack_tables.npz` (53 KB compressed) and are loaded with `np.load`; the generator remains as the fallback if the file is missing, and a test asserts the loaded tables equal a fresh build.
 
 ## 4. Make/unmake, not copy-make
 
@@ -34,11 +34,11 @@ Copy-make allocates a board per node. Under numba the allocation dominates. Make
 
 Source, target, piece, promotion and flags in one integer. A struct of arrays would mean several array arguments per call, which by rule 1 above is the expensive kind of change. Packing keeps move lists as plain int32 arrays.
 
-## 6. Compilation is forced at import
+## 6. Compilation is forced at import, then staged for the final
 
-The platform allows 90 seconds before the clock starts, and no output within that window is a loss. Compiling lazily would mean paying for it inside the first move's time budget. Everything compiles during import instead.
+The qualifier allowed 90 seconds before the clock starts, and no output within that window is a loss. Compiling lazily would mean paying for it inside the first move's time budget, so everything compiles during import, driven by a short warm-up search with the real argument types.
 
-Measured init from the packaged zip is about 30 to 55 seconds cold against the 90 second budget, depending on machine load. It is load sensitive: measured under a saturated CPU it reached 89 seconds, which is a reason not to benchmark during a match rather than a reason to worry about the platform.
+The final cut the budget to 30 seconds against a compile of about 40 seconds on the platform's core. The answer was a wrapper that compiles on a thread, spends 26 seconds of the window waiting for it, and pays the remainder from the clock on move one, where the book usually answers. `docs/FINALS_DAY.md` has the mechanics and the measurements. Local init figures vary by a third with load and core placement on the development laptop, so they are only ever compared as the minimum of repeated runs.
 
 ## 7. Transposition table sizing
 
@@ -77,11 +77,19 @@ Every lookup is gated at move 20. The rules permit a shipped table to answer "a 
 
 ## 11. Time management
 
-Budget per move is derived from the clock and an assumed number of moves remaining. Two constants govern it and both were recalibrated late.
+Budget per move is derived from the clock and an assumed number of moves remaining. Two constants govern it, the per-move reserve and the moves-to-go divisor, and both were recalibrated twice.
 
-The engine's own search does not overshoot: measured against its authorised budget at clock values from 120 seconds down to 250 milliseconds, actual wall time came in within 9 milliseconds at the low end. The per-move cost the model was missing is on the platform side.
+The engine's own search does not overshoot: measured against its authorised budget at clock values from 120 seconds down to 250 milliseconds, actual wall time came in within 9 milliseconds at the low end. Whatever the model was missing was on the platform side.
 
-The original reserve of 120 milliseconds understated the real per-move cost of roughly 420 milliseconds, so every move leaked time the model did not know about. The base clock was exhausted by about move 57, after which the engine played 80 millisecond moves for the rest of the game. Raising the reserve to 420 and the assumed moves remaining from 24 to 40 redistributes the same total time: mean spend across 90 moves is essentially unchanged, but moves 40 to 90 get about 3 times longer to think.
+Before the qualifier the reserve was raised from 120 to 420 milliseconds and the divisor from 24 to 40, on the inference that a rated floor near 200 milliseconds implied a real per-move charge near 420. That inference was wrong. On finals day the engine's clock lines measured the platform's charge at 1 to 2 milliseconds on every move, and the engine had been finishing lost games with a minute unused. The reserve is now 100 milliseconds and the divisor 28, chosen from a sweep of the budget function itself over 60, 100 and 150 move games at the observed spend: never flags, about 30 percent more thinking in a normal game, and a 150 move game still ends with clock in hand. The lesson is the one that recurs through this project: measure the platform, do not infer it.
+
+## 12. Hash keys
+
+The C engine generated its 64-bit Zobrist keys from four draws of a 32-bit xorshift. That generator is a linear map of its state, so all 849 keys span a 32-dimensional space over GF(2) and every position hash carried only 32 bits: distinct positions collided at the 32-bit birthday rate, dozens of times per million nodes. It was found on finals day, when a static-evaluation cache keyed on the hash moved node counts that should have been identical. The keys now come from splitmix64 and have full rank; the fixed-depth fingerprint changed by a single node.
+
+## 13. The fingerprint
+
+`tools/searchbench.py 9` prints the total node count of a fixed-depth search over fifteen positions. It is deterministic across runs and machines, so it identifies the search exactly: a change that is meant to be pure speed must leave it untouched, and a change that is meant to alter the tree must change it in the direction claimed at more than one depth. It is the cheapest gate in the project and the one that caught the most.
 
 ## Resolved
 
