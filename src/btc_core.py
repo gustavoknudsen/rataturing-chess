@@ -567,27 +567,40 @@ def _gen_castling(bb, st, ml, cnt, side):
     attack helpers it calls."""
     castle = st[CASTLE]
     occ_all = bb[OCC_A]
+    # The squares below are literals, so they are only meaningful while the
+    # king is actually on its standard square. In standard chess castling
+    # rights imply that and this test never fires. Given a Chess960 or
+    # otherwise irregular FEN that still carries KQkq, it stops make_move
+    # XORing bb[K] at an empty e1 and creating a second king out of nothing:
+    # 4k3/8/8/8/8/8/8/RK6 w KQ - 0 1 played e1g1 into a three-king position.
+    king_home = e1 if side == WHITE else e8
+    if not (bb[K if side == WHITE else k] & (ONE << uint64(king_home))):
+        return cnt
+    # Likewise the rook: make_move XORs the rook bitboard at the corner
+    # literal, so a right without a rook there manufactures one.
+    # 4k3/8/8/8/8/8/8/4K3 w KQ - 0 1 played e1g1 into 5RKR.
+    rooks = bb[R] if side == WHITE else bb[r]
     if side == WHITE:
-        if castle & WK_CASTLE:
+        if castle & WK_CASTLE and (rooks & (ONE << uint64(h1))):
             path = (ONE << uint64(f1)) | (ONE << uint64(g1))
             if not (occ_all & path) and not is_under_attack(bb, int64(e1), int64(BLACK)) \
                     and not is_under_attack(bb, int64(f1), int64(BLACK)):
                 ml[cnt] = e1 | (g1 << 6) | (K << 12) | CASTLE_FLAG
                 cnt += 1
-        if castle & WQ_CASTLE:
+        if castle & WQ_CASTLE and (rooks & (ONE << uint64(a1))):
             path = (ONE << uint64(d1)) | (ONE << uint64(c1)) | (ONE << uint64(b1))
             if not (occ_all & path) and not is_under_attack(bb, int64(e1), int64(BLACK)) \
                     and not is_under_attack(bb, int64(d1), int64(BLACK)):
                 ml[cnt] = e1 | (c1 << 6) | (K << 12) | CASTLE_FLAG
                 cnt += 1
         return cnt
-    if castle & BK_CASTLE:
+    if castle & BK_CASTLE and (rooks & (ONE << uint64(h8))):
         path = (ONE << uint64(f8)) | (ONE << uint64(g8))
         if not (occ_all & path) and not is_under_attack(bb, int64(e8), int64(WHITE)) \
                 and not is_under_attack(bb, int64(f8), int64(WHITE)):
             ml[cnt] = e8 | (g8 << 6) | (k << 12) | CASTLE_FLAG
             cnt += 1
-    if castle & BQ_CASTLE:
+    if castle & BQ_CASTLE and (rooks & (ONE << uint64(a8))):
         path = (ONE << uint64(d8)) | (ONE << uint64(c8)) | (ONE << uint64(b8))
         if not (occ_all & path) and not is_under_attack(bb, int64(e8), int64(WHITE)) \
                 and not is_under_attack(bb, int64(d8), int64(WHITE)):

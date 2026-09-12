@@ -28,19 +28,39 @@ class GameTracker:
 
     def update(self, fen):
         """Parse the incoming FEN and extend history. Returns the opponent's
-        move as a packed int, or None (first call or desync reset)."""
+        move as a packed int, or None (first call, no move made, or a desync
+        reset)."""
         core.parse_fen(fen, self.bb, self.st)
         opp_move = None
+        unchanged = False
         if self.expected_bb is not None:
-            opp_move = self._match_opponent_move()
-        if opp_move is None and self.key_count > 0:
-            self.resets += 1
-        if opp_move is None:
-            self.key_count = 0
-        self._append_key(self.bb[core.HASH])
+            unchanged = self._is_expected()
+            if not unchanged:
+                opp_move = self._match_opponent_move()
         self.expected_bb = None
         self.expected_st = None
+        if unchanged:
+            # Asked to move again from the position our own last move
+            # produced. push_our_move already appended this key, so appending
+            # again would double-count it, and treating it as a desync would
+            # throw away the whole repetition history. This is the
+            # play-both-sides case. A referee RETRY, which re-sends the
+            # position from before our move, still resets: that is a different
+            # shape and is not handled here.
+            return None
+        if opp_move is None:
+            if self.key_count > 0:
+                self.resets += 1
+                print(f"tracker: history reset ({self.resets})", flush=True)
+            self.key_count = 0
+        self._append_key(self.bb[core.HASH])
         return opp_move
+
+    def _is_expected(self):
+        """The incoming position is exactly the one our last move produced."""
+        return bool(self.bb[core.HASH] == self.expected_bb[core.HASH]
+                    and self._same_position(self.expected_bb,
+                                            self.expected_st))
 
     def push_our_move(self, mv):
         """Record our chosen move; the resulting position joins the history
@@ -68,8 +88,8 @@ class GameTracker:
 
     def _match_opponent_move(self):
         exp_bb, exp_st = self.expected_bb, self.expected_st
-        if self.bb[core.HASH] == exp_bb[core.HASH] and self._same_position(exp_bb, exp_st):
-            return None
+        # update() has already ruled out the unchanged case, so any position
+        # reachable here is genuinely a different one.
         for mv in core.legal_moves(exp_bb, exp_st):
             self._scratch_bb[:] = exp_bb
             self._scratch_st[:] = exp_st

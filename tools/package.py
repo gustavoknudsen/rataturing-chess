@@ -37,6 +37,11 @@ SHIP = [
     "btc_book.py",
     "btc_nnue.py",
     "btc_nrt.py",
+    # Shipped but never imported at BTC_THREADS=1, which is the shipped
+    # configuration. It rides along so that raising the thread count on
+    # finals day is a panel change rather than a file copy under time
+    # pressure. About 7 KB against a 50 MB cap.
+    "btc_parallel.py",
     "btc_search.py",
     "btc_time.py",
 ]

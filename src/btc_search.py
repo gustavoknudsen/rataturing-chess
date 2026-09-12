@@ -198,6 +198,16 @@ USE_MOVECOUNT_FIX = not MINIMAL and _flag("BTC_MOVECOUNT_FIX")
 # discards the only lines that make progress. Same unit-scale hazard
 # that delta pruning and fail-soft quiescence hit.
 USE_LMR_ONSET = not MINIMAL and _flag("BTC_LMR_ONSET")
+
+# Time management only: spend less when one root move consumed most of the
+# iteration. Costs one array read per root move and one subtraction on the
+# rare alpha-raise, both pruned entirely when this is off.
+USE_NODE_EFFORT = not MINIMAL and os.environ.get("BTC_NODE_EFFORT") == "1"
+
+# Continuous forms of the two soft-budget rules. Each reduces to the step
+# version at its own threshold, so this smooths the policy rather than
+# replacing it: stable_count 5 still yields 0.70, a 50 cp drop still 1.30.
+USE_SOFT_CONTINUOUS = not MINIMAL and os.environ.get("BTC_SOFT_CONT") == "1"
 # Treat a negative search depth as quiescence rather than searching it full
 # width. Default OFF only so a grouped SPRT can be bisected; this is a
 # correctness fix, not a heuristic.
@@ -274,6 +284,11 @@ USE_SINGULAR = not MINIMAL and _flag("BTC_SINGULAR")
 # because it reuses that search.
 USE_MULTICUT = USE_SINGULAR \
     and os.environ.get("BTC_MULTICUT", "1") == "1"
+# Clear the child ply's killer slots on entry to a node, so a node cannot
+# inherit a killer from a sibling subtree that has nothing to do with it. The
+# table is otherwise cleared once per search. Published at 5.77 +-3.92, which
+# is small enough that only a match settles it, so this is OFF until one does.
+USE_KILLER_CLEAR = os.environ.get("BTC_KILLER_CLEAR") == "1"
 USE_FULL_EVAL = _flag("BTC_EVAL")
 
 INFINITY = 50000
@@ -447,7 +462,14 @@ SC_ROOT_DEPTH, SC_ROOT_SCORE = 8, 9
 # after _node_prologue returns and before any recursive call, like
 # SC_CORR_ADJ: a deeper ply overwrites the slot.
 SC_TT_PV = 10
-SC_COUNT = 11
+
+# Nodes spent on the root move that most recently raised alpha. Divided by the
+# nodes of the whole iteration this is Stockfish's "effort": a position where
+# almost every node went into one move is one the search has already decided,
+# and the remaining budget buys little. It is a different signal from best-move
+# stability, which can stay high while the position is still sharp.
+SC_BEST_NODES = 11
+SC_COUNT = 12
 # Ply below which null move is disabled, while a verification search runs.
 # 0 means no verification is in progress. Rides in `sc` for the same reason:
 # an extra array argument to negamax costs NRT traffic on every call.
@@ -1864,7 +1886,17 @@ def _lmr_reduction(mv, depth, moves_searched, improving, in_check,
     return reduction if reduction > 0 else 0
 
 
-@njit(cache=False, fastmath=True, error_model='numpy')
+# nogil is what makes a parallel search possible at all, and it belongs here
+# and nowhere else: this is the only compiled function Python calls into
+# during a search, and calls between compiled functions never touch the GIL.
+# Inert while the engine is single-threaded, which is why it is unconditional
+# rather than gated - a flag would only mean the threaded path compiles a
+# second copy of a 2500 line function.
+#
+# It is not on its own safe to use. btc_nrt makes numba's reference counting
+# non-atomic, so a second thread corrupts memory silently. btc_parallel owns
+# that interlock and refuses to start threads unless BTC_NRT=0.
+@njit(cache=False, fastmath=True, error_model='numpy', nogil=True)
 def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls,
             scores, killers, main_hist, cap_hist, corr, cont_hist,
             counters, played, static_evals, pv_table, pv_len, rep, tt_key,
@@ -2148,6 +2180,19 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
                 # the tree smaller and are exactly what is wanted here.
                 singular = 0
 
+    # Killers belong to the subtree about to be searched, not to whichever
+    # sibling last wrote them. Two plies down, not one: ply + 1 is the
+    # opponent's turn and its killers are in use by the child right now, while
+    # ply + 2 is the same side to move as this node and is the slot a sibling
+    # subtree would have polluted. Clearing ply + 1 instead cost 21 percent
+    # more nodes at fixed depth. killers is (2, MAX_SEARCH_PLY + 1),
+    # so MAX_SEARCH_PLY is the last legal index and the guard is not optional:
+    # bounds checking is off, and an out of range write here would corrupt
+    # whatever numpy put after the array.
+    if USE_KILLER_CLEAR and ply + 2 <= MAX_SEARCH_PLY:
+        killers[0, ply + 2] = 0
+        killers[1, ply + 2] = 0
+
     cnt = generate_moves(bb, st, mls[ply])
     _sort_moves(bb, st, mls[ply], scores[ply], cnt, ply, tt_move, killers,
                 main_hist, cap_hist, cont_hist, counters, played)
@@ -2174,6 +2219,7 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
 
     row = mls[ply]
     srow = scores[ply]
+    node_mark = int64(0)
     for i in range(cnt):
         mv = row[i] if USE_ROWVIEW else mls[ply, i]
         if mv == excluded:
@@ -2188,6 +2234,8 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
         prune_see = _see_prunable(mv_score, mv, depth, see_count,
                                   pv_node, in_check, alpha, tt_move, excluded)
 
+        if USE_NODE_EFFORT and ply == 0:
+            node_mark = sc[SC_NODES]
         rep[rep_idx] = bb[HASH]
         if make_move(bb, st, undo_bb, undo_st, ply, mv) == 0:
             continue
@@ -2298,6 +2346,8 @@ def negamax(acc, alpha, beta, depth, ply, rep_idx, bb, st, undo_bb, undo_st, mls
             best_score = score
 
         if score > alpha:
+            if USE_NODE_EFFORT and ply == 0:
+                sc[SC_BEST_NODES] = sc[SC_NODES] - node_mark
             hash_flag = int64(HASH_EXACT)
             best_move = mv
             alpha = score
@@ -2416,13 +2466,39 @@ def _is_slower_mate(best_score, new_score):
 # (0.90 to 4.32 across positions), which is exactly what hard_ms absorbs.
 ITER_RATIO = _tune("BTC_ITER_RATIO", 2.0)
 
+# Fraction of an iteration's nodes, in percent, above which the best move is
+# treated as decided. Stockfish stops outright near 97; this scales the soft
+# budget instead, which fits the existing stability and score-drop factors.
+NODE_EFFORT_PCT = _tune("BTC_NODE_EFFORT_PCT", 80)
+NODE_EFFORT_SCALE = _tune("BTC_NODE_EFFORT_SCALE", 70)
 
-def _adjusted_soft(soft_ms, stable_count, score_drop):
+# Per-iteration effort is noisy: measured, it swings between 99 and 35 on
+# consecutive depths of the same search, and acting on one reading lost 6 elo
+# over 400 games. Stockfish accumulates it across the whole search; the root
+# move list is re-sorted every iteration so indices are not stable enough to do
+# that cheaply here, and requiring two consecutive high readings is the cheap
+# form of the same smoothing.
+SOFT_STABLE_STEP = _tune("BTC_SOFT_STABLE_STEP", 6)
+SOFT_DROP_CP = _tune("BTC_SOFT_DROP_CP", 50)
+SOFT_DROP_MAX = _tune("BTC_SOFT_DROP_MAX", 30)
+
+
+def _adjusted_soft(soft_ms, stable_count, score_drop, effort_pct=0,
+                   prev_effort=0, drop_cp=0):
     adjusted = soft_ms
-    if stable_count >= 5:
-        adjusted = adjusted * 70 // 100
-    if score_drop:
-        adjusted = adjusted * 130 // 100
+    if USE_SOFT_CONTINUOUS:
+        steady = 100 - SOFT_STABLE_STEP * min(stable_count, 5)
+        adjusted = adjusted * steady // 100
+        ramp = min(drop_cp * 100 // max(SOFT_DROP_CP, 1), 100)
+        adjusted = adjusted * (100 + SOFT_DROP_MAX * ramp // 100) // 100
+    else:
+        if stable_count >= 5:
+            adjusted = adjusted * 70 // 100
+        if score_drop:
+            adjusted = adjusted * 130 // 100
+    # Two consecutive readings, not one. See SOFT_STABLE_STEP above.
+    if USE_NODE_EFFORT and effort_pct >= NODE_EFFORT_PCT             and prev_effort >= NODE_EFFORT_PCT:
+        adjusted = adjusted * NODE_EFFORT_SCALE // 100
     return adjusted
 
 
@@ -2471,6 +2547,7 @@ def search_position(state, bb, st, rep_keys, rep_count, soft_ms, hard_ms,
     state.sc[SC_CORR_ADJ] = 0
     state.sc[SC_ROOT_DEPTH] = 0
     state.sc[SC_ROOT_SCORE] = 0
+    state.sc[SC_BEST_NODES] = 0
     state.sc[SC_TT_GEN] += 1
     state.killers[:] = 0
     state.pv_table[:] = 0
@@ -2507,12 +2584,16 @@ def search_position(state, bb, st, rep_keys, rep_count, soft_ms, hard_ms,
     best_move, best_score, completed = legal[0], 0, 0
     prev_best, prev_score, stable_count, score_drop = 0, 0, 0, False
 
+    effort_pct, prev_effort, drop_cp = 0, 0, 0
     for depth in range(1, max_depth + 1):
         if depth > 1 and soft_ms > 0:
             elapsed_ms = (time.perf_counter() - started) * 1000.0
             if elapsed_ms * ITER_RATIO > _adjusted_soft(soft_ms, stable_count,
-                                                        score_drop):
+                                                        score_drop, effort_pct,
+                                                        prev_effort, drop_cp):
                 break
+        iter_start_nodes = int(state.sc[SC_NODES])
+        state.sc[SC_BEST_NODES] = 0
         score = _aspiration_search(state, bb, st, prev_score, depth, rep_base)
         if state.sc[SC_STOP]:
             break
@@ -2521,6 +2602,12 @@ def search_position(state, bb, st, rep_keys, rep_count, soft_ms, hard_ms,
             best_score = score
             completed = depth
         cur_best = int(state.pv_table[0, 0])
+        if USE_NODE_EFFORT:
+            iter_nodes = int(state.sc[SC_NODES]) - iter_start_nodes
+            prev_effort = effort_pct
+            effort_pct = (int(state.sc[SC_BEST_NODES]) * 100 // iter_nodes
+                          if iter_nodes > 0 else 0)
+        drop_cp = max(0, prev_score - score) if depth > 1 else 0
         score_drop = depth > 1 and score < prev_score - 50
         stable_count = stable_count + 1 if depth > 1 and cur_best == prev_best else 0
         prev_best, prev_score = cur_best, score

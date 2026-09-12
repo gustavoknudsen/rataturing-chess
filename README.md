@@ -1,11 +1,12 @@
 # Rataturing
 
-A chess engine for the AI Chessathon, written in Python and compiled with numba.
+A chess engine for the AI Chessathon, written in Python and compiled with numba. **Finished 5th of 334 entrants** in the qualification Swiss and reached the London final.
 
 Two evaluations exist. **Rataturing NNUE** uses a neural network trained from scratch for this entry, and is what ships. **Rataturing Classic** uses a hand-crafted evaluation and runs whenever no network is present.
 
 ## Contents
 
+- [Competition result](#competition-result)
 - [Play against it](#play-against-it)
 - [Competition constraints](#competition-constraints)
 - [Repository structure](#repository-structure)
@@ -13,6 +14,21 @@ Two evaluations exist. **Rataturing NNUE** uses a neural network trained from sc
 - [Performance](#performance)
 - [Development method](#development-method)
 - [Further reading](#further-reading)
+
+## Competition result
+
+| | |
+|---|---|
+| Placing | **5th of 334** |
+| Score | 10.0 / 13 |
+| Record | 8 wins, 4 draws, 1 loss |
+| Rating | 2853 |
+| Tiebreak | Buchholz 113.5 |
+| Outcome | qualified for the London final, a knockout among the top 50 |
+
+Qualification was a 13-round Swiss played over locked builds, so every entrant submitted once and the same binary played all thirteen games. Half a point separated this entry from first place, and only the Buchholz tiebreak separated it from third and fourth. [Leaderboard](https://aichessathon.com/leaderboard?stage=finalset).
+
+Every entrant ran on the same fixed platform under the same limits, listed in [Competition constraints](#competition-constraints) below. Most of this engine's design follows from them.
 
 ## Play against it
 

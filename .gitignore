@@ -69,3 +69,10 @@ book/data/*
 # and the archives are attached to a GitHub release rather than committed.
 release/
 *.spec
+
+# Finals-day contingency work. The scripts are tracked; their outputs are not.
+finals_day/nets/
+finals_day/staging/
+
+# Working notes for the next session, not part of the published repository.
+HANDOFF.md

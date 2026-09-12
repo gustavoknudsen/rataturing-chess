@@ -33,8 +33,12 @@ import sys
 
 import chess
 
+# data/, not beside this file: the 600-position set is data, and tools/ is
+# code. Pointing at the wrong path does not fail, it silently falls back to the
+# eight samples below, which makes every match repeat the same handful of
+# openings and reports an interval far narrower than the truth.
 CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                     "openings.json")
+                     os.pardir, "data", "openings.json")
 
 # The eight published in the starter harness. Kept first so results stay
 # comparable with earlier matches, and because they are a real sample of the
@@ -141,11 +145,20 @@ def from_pgn(path, count, plies=12):
 
 
 def load(count=None):
-    """Cached opening set, falling back to the published sample."""
+    """Cached opening set, falling back to the published sample.
+
+    The fallback is loud on purpose. A silent one cost three matches: the cache
+    moved to data/ during a reorganisation, load() quietly returned the eight
+    samples, and 500-game runs repeated each opening 60 times while reporting a
+    +-4.4% interval that assumed they were independent.
+    """
     if os.path.exists(CACHE):
         with open(CACHE, encoding="ascii") as handle:
             fens = json.load(handle)
     else:
+        print("openings: %s not found, falling back to %d samples. Match "
+              "intervals will be optimistic." % (os.path.normpath(CACHE),
+                                                 len(SAMPLE)), flush=True)
         fens = list(SAMPLE)
     if count is not None:
         fens = fens[:count]

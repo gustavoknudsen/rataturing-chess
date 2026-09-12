@@ -38,8 +38,34 @@ MTG = int(os.environ.get("BTC_MTG", "40"))
 
 def budget(time_left_ms, move_number, increment_ms=500):
     time_left = time_left_ms + increment_ms * (MTG - 1) - OVERHEAD_MS * (2 + MTG)
-    if time_left < 1:
-        time_left = 1
+    # The reserve above is a constant 17.6 s at the shipped values. Against
+    # the 120 s clock it was tuned for it is a sensible cushion, but at any
+    # shorter control, or at any control whose increment does not refill it,
+    # it exceeds the whole clock and the old floor of 1 made every budget
+    # below derive from 1 ms: 0 ms soft and the 10 ms hard floor while
+    # seconds remained, for the rest of the game. It was also non-monotonic,
+    # handing out 10 ms at a 13 s clock and 130 ms at 900 ms.
+    #
+    # Flooring at half the clock instead keeps a starved budget proportional
+    # to what is actually left. At increment 500 this cannot bind at any
+    # clock value, so the tournament control is bit-identical; both
+    # test_time_budget and an independent audit confirmed that over the full
+    # range rather than trusting the algebra.
+    #
+    # Be clear about what this does NOT do. Below about 450 ms of increment
+    # the floor overrides the reserve rather than protecting it, and hands
+    # out time the platform still charges 420 ms per move for. In a naive
+    # drain model that reaches a zero clock 15 to 25 moves earlier than the
+    # old formula did. The old behaviour there was 10 ms moves for the rest
+    # of the game, so this is a different failure rather than a strictly
+    # safer one. At any control under 450 ms increment, set BTC_MTG and
+    # BTC_MOVE_OVERHEAD from finals_day/tc_tune.py as well; the floor alone
+    # is not a fix for a short control.
+    floor = time_left_ms // 2
+    if floor < 1:
+        floor = 1
+    if time_left < floor:
+        time_left = floor
 
     opt_scale = min((0.9 + move_number / 120.0) / MTG,
                     0.9 * time_left_ms / time_left)
@@ -54,4 +80,12 @@ def budget(time_left_ms, move_number, increment_ms=500):
         soft = hard = emergency
 
     hard = max(min(hard, time_left_ms - OVERHEAD_MS), 10.0)
+    # The emergency branch above sets soft = hard, and the clamp then lowers
+    # hard alone, so soft could end up above the wall it is supposed to sit
+    # under: at a 500 ms clock this returned soft 330 against hard 80. hard is
+    # enforced and soft is not, so the search merely started an iteration it
+    # could not finish, but nothing downstream should have to know that.
+    # Untouched above 1500 ms, where the emergency branch never runs.
+    if soft > hard:
+        soft = hard
     return int(soft), int(hard)
