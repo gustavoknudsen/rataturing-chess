@@ -56,7 +56,7 @@ Build them yourself with `python uci/build.py`. The build takes the engine sourc
 
 **Allowed:** your own prior work, self-trained networks, unrestricted training data, and a shipped table that answers the opening or the endgame, where the opening is a position whose move number is 20 or lower.
 
-Rataturing is built on BetterThanCris, a C engine by the same author, since extended with C++ files and utilities, which the rules permit: "Your moves come from code you wrote." The network is trained from scratch. The opening books are gated at move 20 in `src/btc_book.py`, checked against the referee's own FEN. Full summary in [`docs/RULES.md`](docs/RULES.md).
+The network is trained from scratch. The opening books are gated at move 20 in `src/btc_book.py`, checked against the referee's own FEN. Full summary in [`docs/RULES.md`](docs/RULES.md).
 
 ## How it works
 
