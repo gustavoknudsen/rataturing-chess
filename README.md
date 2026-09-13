@@ -164,7 +164,6 @@ The search carries many features behind environment flags, defaulting off. numba
 - [`docs/DESIGN_DECISIONS.md`](docs/DESIGN_DECISIONS.md) - why the engine is built this way, with the measurements behind each choice
 - [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) - how the engine, the network and the book were made and tested
 - [`docs/RULES.md`](docs/RULES.md) - the competition rules, verified against the published documentation
-- [`docs/BTC_BACKPORT.md`](docs/BTC_BACKPORT.md) - everything the C engine it came from should take from this one: bugs, features, research, rejections
-- [`docs/research/`](docs/research/) - the port audit, the search and speed research, and what was learned training the networks
+- [`docs/research/`](docs/research/) - the search and speed research, the finals-day strength research, and what was learned training the networks
 - [`book/README.md`](book/README.md) - the opening book pipeline, including how to obtain its inputs and re-run it
 - [`training/`](training/) - the NNUE data pipeline and the notebook that trained the shipped network

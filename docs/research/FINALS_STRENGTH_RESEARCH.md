@@ -116,7 +116,7 @@ which the staged version writes identically. IIR (tt_move == 0) and singular
 (runs before generation) are untouched. The verification search (excluded
 != 0) must skip the stage; IIR and the singular block run before it as now.
 
-BTC_IMPROVEMENTS rejects full "staged move generation" as a large refactor
+The port-time survey rejects full "staged move generation" as a large refactor
 for about 6 elo. This is the first stage only, about 40 lines, and unlike the
 full refactor it is checkable by the fingerprint.
 

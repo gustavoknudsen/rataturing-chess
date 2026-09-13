@@ -76,3 +76,8 @@ HANDOFF.md
 .claude/
 *.orig
 *.rej
+
+# Notes about the C engine this was ported from, kept private.
+docs/BTC_BACKPORT.md
+docs/research/BTC_UPSTREAM_ISSUES.md
+docs/research/ENGINE_AUDIT.md

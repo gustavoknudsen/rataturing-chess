@@ -26,7 +26,7 @@ I wrote BetterThanCris before this event. It is written in C, extended over time
 
 The port is a translation of my own engine, not of anybody else's. No Stockfish, Lc0 or Maia code is present in any form.
 
-While porting I found and documented 698 lines of bugs in my own C engine. That record is `docs/research/BTC_UPSTREAM_ISSUES.md`.
+While porting I found and documented sixteen bugs in my own C engine, kept in a private record for that engine.
 
 ---
 
