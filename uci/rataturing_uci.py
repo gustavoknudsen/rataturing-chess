@@ -60,7 +60,7 @@ if ENGINE_DIR is None:
 
 import chess
 
-VERSION = "1.0"
+VERSION = "1.1"
 AUTHOR = "Gustavo Knudsen"
 
 # Defaults differ from the competition build in one place. BTC_MOVE_OVERHEAD

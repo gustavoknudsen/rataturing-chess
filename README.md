@@ -1,6 +1,6 @@
 # Rataturing
 
-A chess engine for the AI Chessathon 2026, written in Python and compiled with numba. **5th of 334 entrants** in the qualification Swiss, then **5th to 8th** in the London finals knockout, where it lost the quarter-final 1.5 to 2.5 to the eventual winner.
+A chess engine for the AI Chessathon 2026, written in Python and compiled with numba. **5th of 334 entrants** in the qualification Swiss, then **5th to 8th** in the London finals knockout, where it lost the quarter-final 1.5 to 2.5 to the eventual winner. Rated afterwards at about **3390 CCRL Blitz** against engines with published ratings.
 
 Two evaluations exist. **Rataturing NNUE** uses a neural network trained from scratch for this entry, and is what competed. **Rataturing Classic** uses a hand-crafted evaluation and runs whenever no network is present.
 
@@ -13,6 +13,7 @@ Two evaluations exist. **Rataturing NNUE** uses a neural network trained from sc
 - [Repository structure](#repository-structure)
 - [Getting started](#getting-started)
 - [Performance](#performance)
+- [Strength estimate](#strength-estimate)
 - [Development method](#development-method)
 - [Further reading](#further-reading)
 
@@ -124,6 +125,26 @@ Node counts at a fixed depth do not have that problem. `python tools/searchbench
 Three speed changes verified that way on finals day did not ship for lack of match time and are in `src/btc_search.py` behind flags that default off: the static evaluation cached in the transposition table, the accumulator built lazily in the child, and pick-best-and-shift move selection. Each has its measurements beside its flag, and the shipped path is unchanged when they are off.
 
 The network is not the bottleneck. Disabling it lowers throughput, because the NNUE accumulator is updated incrementally while the hand-crafted evaluation recomputes pawn structure, king safety and mobility at every leaf.
+
+## Strength estimate
+
+Rataturing NNUE 1.1, the finals build, was rated against engines with published CCRL Blitz ratings, under CCRL Blitz conditions: 2 min + 1 s, one thread, 128 MB hash, no books, no tablebases, neutral 8-ply openings played with both colours. An adaptive gauntlet picked the opponent nearest the running estimate in blocks of eight games, 427 games in all.
+
+**About 3390 CCRL Blitz, plus or minus 40.**
+
+| opponent | rating | games | score | performance |
+|---|---|---|---|---|
+| Stockfish 10 | 3509 | 64 | 36.7% | 3414 |
+| Komodo 13.02 | 3461 | 64 | 52.3% | 3477 |
+| Pedantic 2.1 | 3400 | 64 | 52.3% | 3416 |
+| Nalwald 19 | 3340 | 64 | 54.7% | 3373 |
+| Maelstrom 3.3 | 3314 | 64 | 57.8% | 3369 |
+| StockNemo 5.7 | 3269 | 54 | 63.0% | 3361 |
+| Gull 3 | 3159 | 24 | 60.4% | 3232 |
+
+Inverse-variance weighted over every opponent, including three weaker ones decided early: 3393, standard error 12, reduced chi-square 2.28, overdispersion-inflated interval plus or minus 37. The estimate inherits the opponents' own rating errors and was measured on a laptop with four games at once, so read it as a placement on the CCRL scale rather than a CCRL entry. The C engine it was ported from is listed at 2933.
+
+The gauntlet tool is its own repository, [chess-elo-gauntlet](https://github.com/gustavoknudsen/chess-elo-gauntlet).
 
 ## Development method
 
