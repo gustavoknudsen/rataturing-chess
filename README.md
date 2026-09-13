@@ -66,7 +66,7 @@ The network is trained from scratch. The opening books are gated at move 20 in `
 
 **Evaluation.** A king-bucketed NNUE: 32 king buckets by 768 features into a 512-wide layer, 8 output buckets keyed on piece count, quantised to int16. The accumulator is updated incrementally through make and unmake. Trained from scratch on public engine-labelled data; the training pipeline and notebook are in `training/`.
 
-**Opening books.** Three Polyglot files: one built on finals day from the positions the tournament had actually used, one built before the qualifier from the published curated starts, and a hedge for the standard start. All three are gap-filled from public data and labelled by this engine.
+**Opening books.** Two Polyglot files: the main book, rebuilt on finals day from the positions the tournament had actually used, and a hedge for the standard start. Both are gap-filled from public data and labelled by this engine.
 
 **The final's staged wrapper.** The engine's numba compile takes about 40 s on the platform against a 30 s budget. `staged/agent_staged.py` starts the compile on a thread, spends 26 s of the init window waiting for it, and pays the rest from the clock on move one, where the book usually answers. It is what shipped for the knockout.
 
@@ -85,7 +85,7 @@ The network is trained from scratch. The opening books are gated at move 20 in `
     book/         opening book pipeline: scrape, expand, label, merge, build
     docs/         rules, design decisions, the finals-day record, research notes
 
-The network (`src/net.npz`, 24 MB) and the three opening books (`src/*.bin`, 24 MB) are included, so a clone runs the engine that actually competed. They sit beside the engine rather than in a data directory because `btc_nnue.find_net()` and `btc_book._path()` both resolve relative to their own module, and the submission zip is flat.
+The network (`src/net.npz`, 24 MB) and the two opening books (`src/*.bin`, 16 MB) are included, so a clone runs the engine that actually competed. They sit beside the engine rather than in a data directory because `btc_nnue.find_net()` and `btc_book._path()` both resolve relative to their own module, and the submission zip is flat.
 
 ## Getting started
 

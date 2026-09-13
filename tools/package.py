@@ -50,7 +50,7 @@ SHIP = [
 # move number, so a position stored at move 5 would otherwise answer at
 # move 34 by transposition. attack_tables.npz holds the precomputed magic
 # slider tables so they are loaded rather than compiled at import.
-DATA = ["net.npz", "rataturing_new.bin", "rataturing.bin", "rataturing_hedge.bin",
+DATA = ["net.npz", "rataturing.bin", "rataturing_hedge.bin",
         "attack_tables.npz"]
 
 # llvmlite is a hard dependency of numba - its metadata declares
