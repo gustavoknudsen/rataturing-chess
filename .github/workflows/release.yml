@@ -4,7 +4,8 @@ name: release
 # and attaches them to the GitHub release for that tag. PyInstaller cannot
 # cross-build, so each archive is made on the platform it runs on. Run it by
 # hand from the Actions tab to get the archives as workflow artifacts without
-# a release.
+# a release. Intel Macs are not built: GitHub's macos-13 runners queue for
+# an hour or more; Intel Mac users run the engine from source.
 
 on:
   push:
@@ -16,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest, macos-13]
+        os: [windows-latest, ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +35,7 @@ jobs:
         run: python tools/package.py
 
       - name: Build the executables
-        run: python uci/build.py
+        run: python uci/build.py --variant nnue
 
       - name: Keep the archives
         uses: actions/upload-artifact@v4

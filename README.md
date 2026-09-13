@@ -39,7 +39,7 @@ Releases include a UCI executable for Arena, Cute Chess and any other standard G
 
 The engine compiles itself with numba when it starts, which takes about a minute. That happens once per session rather than once per game, so only the first game waits. [`uci/README.md`](uci/README.md) explains what was tried to shorten it and why none of it worked.
 
-Build them yourself with `python uci/build.py`. The build takes the engine source out of `submission.zip` rather than out of `src/`, so the released executable is verifiably the engine that competed, with nothing added but a protocol adapter. It produces an archive for the platform it runs on; the release workflow in `.github/workflows/release.yml` builds Windows, Linux and macOS archives on a tag push.
+Build them yourself with `python uci/build.py`. The build takes the engine source out of `submission.zip` rather than out of `src/`, so the released executable is verifiably the engine that competed, with nothing added but a protocol adapter. It produces an archive for the platform it runs on; the release workflow in `.github/workflows/release.yml` builds Windows, Linux and macOS (Apple silicon) archives on a tag push.
 
 On any platform the engine also runs from source without a build: `pip install -r requirements.txt` and point the GUI at `python uci/rataturing_uci.py`.
 
