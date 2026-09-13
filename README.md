@@ -21,7 +21,7 @@ Two evaluations exist. **Rataturing NNUE** uses a neural network trained from sc
 
 | stage | format | result |
 |---|---|---|
-| Qualification Swiss, 11 September | 13 rounds, 334 entrants, locked builds | **5th**, 10.0 / 13, 8 wins 4 draws 1 loss, rating 2853 |
+| Qualification Swiss, 11 September | 13 rounds, 334 entrants, locked builds | **5th**, 10.0 / 13, 8 wins 4 draws 1 loss |
 | London finals knockout, 12 September | single elimination, four games per round | **5th to 8th**, lost the quarter-final 1.5 to 2.5 to AlphaFish, who won the event |
 
 Half a point separated this entry from first place in the Swiss, and only the Buchholz tiebreak from third and fourth. The final began with a surprise constraint: the init budget was cut from 90 s to 30 s at 10:30, with builds locked at 14:00. How that was answered is in [`docs/FINALS_DAY.md`](docs/FINALS_DAY.md). Leaderboards: [Swiss](https://aichessathon.com/leaderboard?stage=finalset), [knockout](https://aichessathon.com/leaderboard?stage=knockout).
