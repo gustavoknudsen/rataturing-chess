@@ -40,6 +40,14 @@ SUBMISSION = os.path.join(REPO, "submission.zip")
 ADAPTER = os.path.join(HERE, "rataturing_uci.py")
 OUT = os.path.join(REPO, "release")
 VERSION = "1.1"
+
+# Executable suffix and archive tag for the platform this runs on. PyInstaller
+# cannot cross-build, so each platform's archive is made on that platform.
+import platform as _platform
+EXE = ".exe" if sys.platform == "win32" else ""
+_ARCH = _platform.machine().lower().replace("amd64", "x64").replace("x86_64", "x64")
+PLATFORM_TAG = {"win32": "win64", "darwin": "macos-" + _ARCH}.get(
+    sys.platform, "linux-" + _ARCH)
 VARIANTS = ("nnue", "classic")
 # Bundled explicitly: PyInstaller analyses the adapter, and the adapter does
 # not import these. Only the loose engine files do, and those are copied in
@@ -127,10 +135,11 @@ every game after the first starts instantly.
 
 INSTALLING
 
-Point your GUI at Rataturing-%s.exe. In Arena use Engines, Install New
-Engine. In Cute Chess use Tools, Settings, Engines, Add.
+Point your GUI at Rataturing-%s%s. In Arena use Engines, Install New
+Engine. In Cute Chess use Tools, Settings, Engines, Add. On Linux and macOS
+mark it executable first if the archive did not preserve that.
 
-Keep the folder intact. The exe needs engine/ beside it.
+Keep the folder intact. The executable needs engine/ beside it.
 
 OPTIONS
 
@@ -144,7 +153,7 @@ infinite and fixed-depth searches always search.
 
 WHAT IS IN THIS FOLDER
 
-    Rataturing-%s.exe   the engine
+    Rataturing-%s%s   the engine
     engine/             the competition engine, as ordinary Python files
     _internal/          Python runtime and libraries
 
@@ -156,7 +165,7 @@ LICENCE
 
 MIT. See the repository.
 """ % (_title(variant), VERSION, "=" * (12 + len(_title(variant))),
-       _title(variant), _title(variant), _EVAL[variant])
+       _title(variant), EXE, _title(variant), EXE, _EVAL[variant])
     path = os.path.join(folder, "README.txt")
     io.open(path, "w", encoding="utf-8", newline="").write(text)
 
@@ -234,11 +243,11 @@ def build(variant, use_cache, run_smoke):
     shutil.copytree(staging, target)
     _readme(folder, variant)
     _verify(folder, variant, use_cache)
-    exe = os.path.join(folder, name + ".exe")
+    exe = os.path.join(folder, name + EXE)
     if run_smoke and not _smoke(exe):
         raise SystemExit("smoke test failed for %s" % variant)
-    archive = os.path.join(OUT, "Rataturing-%s-%s-win64"
-                           % (_title(variant), VERSION))
+    archive = os.path.join(OUT, "Rataturing-%s-%s-%s"
+                           % (_title(variant), VERSION, PLATFORM_TAG))
     if os.path.exists(archive + ".zip"):
         os.remove(archive + ".zip")
     shutil.make_archive(archive, "zip", os.path.dirname(folder),

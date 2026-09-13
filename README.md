@@ -39,7 +39,9 @@ Releases include a UCI executable for Arena, Cute Chess and any other standard G
 
 The engine compiles itself with numba when it starts, which takes about a minute. That happens once per session rather than once per game, so only the first game waits. [`uci/README.md`](uci/README.md) explains what was tried to shorten it and why none of it worked.
 
-Build them yourself with `python uci/build.py`. The build takes the engine source out of `submission.zip` rather than out of `src/`, so the released executable is verifiably the engine that competed, with nothing added but a protocol adapter.
+Build them yourself with `python uci/build.py`. The build takes the engine source out of `submission.zip` rather than out of `src/`, so the released executable is verifiably the engine that competed, with nothing added but a protocol adapter. It produces an archive for the platform it runs on; the release workflow in `.github/workflows/release.yml` builds Windows, Linux and macOS archives on a tag push.
+
+On any platform the engine also runs from source without a build: `pip install -r requirements.txt` and point the GUI at `python uci/rataturing_uci.py`.
 
 ## Competition constraints
 
@@ -162,6 +164,7 @@ The search carries many features behind environment flags, defaulting off. numba
 - [`docs/DESIGN_DECISIONS.md`](docs/DESIGN_DECISIONS.md) - why the engine is built this way, with the measurements behind each choice
 - [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) - how the engine, the network and the book were made and tested
 - [`docs/RULES.md`](docs/RULES.md) - the competition rules, verified against the published documentation
+- [`docs/BTC_BACKPORT.md`](docs/BTC_BACKPORT.md) - everything the C engine it came from should take from this one: bugs, features, research, rejections
 - [`docs/research/`](docs/research/) - the port audit, the search and speed research, and what was learned training the networks
 - [`book/README.md`](book/README.md) - the opening book pipeline, including how to obtain its inputs and re-run it
 - [`training/`](training/) - the NNUE data pipeline and the notebook that trained the shipped network
